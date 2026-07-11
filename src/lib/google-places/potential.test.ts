@@ -28,7 +28,9 @@ describe("potansiyel aday kuralları", () => {
   });
 
   it("güçlü yerel web sitesi adayını öncelikli işaretler", () => {
-    expect(assessPotential(place({ rating: 4.7, userRatingCount: 42 }), "website").level).toBe("high");
+    const result = assessPotential(place({ rating: 4.7, userRatingCount: 42 }), "website");
+    expect(result.level).toBe("high");
+    expect(result.score).toBe(100);
   });
 
   it("ön muhasebede stok ve cari yoğun sektörü önceliklendirir", () => {
@@ -39,6 +41,7 @@ describe("potansiyel aday kuralları", () => {
   it("az yorumlu B2B toptancıyı dengeli modda kaçırmaz", () => {
     const result = assessPotential(place({ rating: 4.1, userRatingCount: 3, sector: "Gıda toptancısı" }), "accounting");
     expect(result).toMatchObject({ eligible: true, level: "high" });
+    expect(result.score).toBeGreaterThanOrEqual(75);
   });
 
   it("seçici ve geniş kalite eşiklerini ayrı uygular", () => {

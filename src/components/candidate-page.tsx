@@ -42,7 +42,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
     finally { setSearching(false); }
   }
 
-  async function changeStatus(lead: LeadRecord, status: LeadStatus) {
+  async function changeStatus(lead: LeadRecord, status: LeadStatus, recordContact = false) {
     setLeads((current) => current.filter((item) => item.place_id !== lead.place_id));
     setTotal((current) => Math.max(0, current - 1));
     if (status === "contacted") {
@@ -51,7 +51,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
       undoTimer.current = setTimeout(() => setUndoLead(null), 10_000);
     }
     try {
-      const response = await fetch(`/api/leads/${encodeURIComponent(lead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      const response = await fetch(`/api/leads/${encodeURIComponent(lead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, recordContact }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
     } catch (caught) {
@@ -63,7 +63,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
   }
 
   async function contact(lead: LeadRecord) {
-    try { await changeStatus(lead, "contacted"); }
+    try { await changeStatus(lead, "contacted", true); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Durum güncellenemedi."); }
   }
 

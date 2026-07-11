@@ -17,6 +17,11 @@ const initialRecords: LeadRecord[] = places.map((details, index) => ({
   lead_type: details.placeId.includes("acc") || details.placeId.includes("contacted") ? "accounting" : "website",
   status: details.placeId.includes("contacted") ? "contacted" : "new",
   contacted_at: details.placeId.includes("contacted") ? now.toISOString() : null,
+  next_follow_up_at: details.placeId.includes("contacted") ? new Date(now.getTime() + 3 * 86_400_000).toISOString() : null,
+  contact_count: details.placeId.includes("contacted") ? 1 : 0,
+  notes: null,
+  source_province: details.province,
+  source_sector: details.sector ?? null,
   created_at: new Date(now.getTime() - index * 86_400_000).toISOString(),
   details,
 }));
@@ -34,7 +39,7 @@ export function mockSearch(leadType: LeadType, count: number) {
   const created = Array.from({ length: Math.min(count, 6) }, () => {
     const n = mockStore.counter++;
     const details: PlaceDetails = { ...template, placeId: `demo-${leadType}-${n}`, name: `${leadType === "website" ? "Yeni İşletme" : "Yeni Ticaret"} ${n}`, isDemo: true };
-    const record: LeadRecord = { id: crypto.randomUUID(), place_id: details.placeId, lead_type: leadType, status: "new", contacted_at: null, created_at: new Date().toISOString(), details };
+    const record: LeadRecord = { id: crypto.randomUUID(), place_id: details.placeId, lead_type: leadType, status: "new", contacted_at: null, next_follow_up_at: null, contact_count: 0, notes: null, source_province: details.province, source_sector: details.sector ?? null, created_at: new Date().toISOString(), details };
     mockStore.records.unshift(record);
     return record;
   });

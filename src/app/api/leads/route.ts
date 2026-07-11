@@ -6,14 +6,19 @@ import { getVisiblePlaceDetails } from "@/lib/google-places/client";
 import { orderPotentialPlaces, withPotential } from "@/lib/google-places/potential";
 import { mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { LeadRecord } from "@/types";
+import type { LeadRecord, LeadStatus, LeadType, PlaceDetails } from "@/types";
+
+const DB_STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
+const PIPELINE_STATUSES: LeadStatus[] = ["contacted", "replied", "interested", "demo_sent", "follow_up"];
+const REPLY_STATUSES: LeadStatus[] = ["replied", "interested", "demo_sent", "customer"];
+const INTERESTED_STATUSES: LeadStatus[] = ["interested", "demo_sent", "customer"];
 
 const querySchema = z.object({
-  status: z.enum(["new", "contacted", "not_suitable", "no_whatsapp", "customer", "archived"]).default("new"),
+  status: z.enum([...DB_STATUSES, "pipeline", "due"]).default("new"),
   leadType: z.enum(["website", "accounting"]).optional(),
   period: z.enum(["today", "week", "all"]).default("all"),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(20).default(10),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 function sinceFor(period: "today" | "week" | "all") {
@@ -32,42 +37,48 @@ export async function GET(request: Request) {
 
     if (isMockMode()) {
       const since = sinceFor(params.period);
-      const filtered = mockStore.records.filter((record) =>
-        record.status === params.status &&
-        (!params.leadType || record.lead_type === params.leadType) &&
-        (!since || Boolean(record.contacted_at && record.contacted_at >= since)),
-      );
-      return Response.json({ leads: filtered.slice(from, from + params.pageSize), total: filtered.length, stats: mockStats(), warning: null });
+      const filtered = mockStore.records
+        .filter((record) => matchesStatus(record, params.status))
+        .filter((record) => !params.leadType || record.lead_type === params.leadType)
+        .filter((record) => !since || Boolean(record.contacted_at && record.contacted_at >= since));
+      return Response.json({ leads: filtered.slice(from, from + params.pageSize), total: filtered.length, stats: calculateStats(mockStore.records, mockStore.settings.dailyContactGoal), warning: null });
     }
 
     const supabase = await createSupabaseServerClient();
-    let query = supabase.from("lead_records").select("id,place_id,lead_type,status,contacted_at,created_at", { count: "exact" }).eq("user_id", user.id).eq("status", params.status).order(params.status === "contacted" ? "contacted_at" : "created_at", { ascending: false }).range(from, from + params.pageSize - 1);
+    const orderColumn = params.status === "due" ? "next_follow_up_at" : params.status === "new" ? "created_at" : "contacted_at";
+    let query = supabase
+      .from("lead_records")
+      .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at", { count: "exact" })
+      .eq("user_id", user.id)
+      .order(orderColumn, { ascending: params.status === "due", nullsFirst: false })
+      .range(from, from + params.pageSize - 1);
+
+    if (params.status === "pipeline") query = query.in("status", PIPELINE_STATUSES);
+    else if (params.status === "due") query = query.in("status", PIPELINE_STATUSES).not("next_follow_up_at", "is", null).lte("next_follow_up_at", endOfToday());
+    else query = query.eq("status", params.status);
     if (params.leadType) query = query.eq("lead_type", params.leadType);
     const since = sinceFor(params.period);
-    if (since) query = query.gte("contacted_at", since);
+    if (since && params.status !== "due") query = query.gte("contacted_at", since);
+
     const { data, count, error } = await query;
     if (error) throw error;
     const [detailBatch, stats] = await Promise.all([
       getVisiblePlaceDetails((data ?? []).map((record) => record.place_id)),
       realStats(user.id),
     ]);
-    const details = detailBatch.places;
-    const detailsById = new Map(details.map((place) => [place.placeId, place]));
+    const detailsById = new Map(detailBatch.places.map((place) => [place.placeId, place]));
     let leads = (data ?? []).map((record) => {
-      const detail = detailsById.get(record.place_id);
-      return { ...record, details: detail ? withPotential(detail, record.lead_type) : detail };
-    }) as LeadRecord[];
+      const detail = detailsById.get(record.place_id) ?? unavailablePlace(record.place_id, record.source_province, record.source_sector);
+      return { ...record, details: withPotential(detail, record.lead_type as LeadType) } as LeadRecord;
+    });
     if (params.leadType) {
-      const detailOrder = new Map(
-        orderPotentialPlaces(leads.map((lead) => lead.details), params.leadType)
-          .map((detail, index) => [detail.placeId, index]),
-      );
+      const detailOrder = new Map(orderPotentialPlaces(leads.map((lead) => lead.details), params.leadType).map((detail, index) => [detail.placeId, index]));
       leads = leads.sort((a, b) => (detailOrder.get(a.place_id) ?? 999) - (detailOrder.get(b.place_id) ?? 999));
     }
     const warning = detailBatch.failedCount
       ? detailBatch.quotaLimited
-        ? `${detailBatch.failedCount} işletmenin detayı Google kotası nedeniyle alınamadı. Kayıtlarınız kaybolmadı; kota yenilendiğinde sayfayı tekrar açın.`
-        : `${detailBatch.failedCount} işletmenin detayı geçici olarak alınamadı.`
+        ? `${detailBatch.failedCount} işletmenin canlı Google detayı kota nedeniyle gösterilemedi. Satış kayıtları ve notlarınız güvende.`
+        : `${detailBatch.failedCount} işletmenin canlı detayı geçici olarak alınamadı.`
       : null;
     return Response.json({ leads, total: count ?? 0, stats, warning });
   } catch (error) {
@@ -75,22 +86,86 @@ export async function GET(request: Request) {
   }
 }
 
-function mockStats() {
-  const contacted = mockStore.records.filter((item) => item.contacted_at);
+function matchesStatus(record: LeadRecord, status: (typeof querySchema)['_output']['status']) {
+  if (status === "pipeline") return PIPELINE_STATUSES.includes(record.status);
+  if (status === "due") return PIPELINE_STATUSES.includes(record.status) && Boolean(record.next_follow_up_at && record.next_follow_up_at <= endOfToday());
+  return record.status === status;
+}
+
+function endOfToday() {
+  const date = new Date();
+  date.setHours(23, 59, 59, 999);
+  return date.toISOString();
+}
+
+function unavailablePlace(placeId: string, province: string | null, sector: string | null): PlaceDetails {
+  return {
+    placeId,
+    name: "İşletme detayı kota yenilenince görünecek",
+    address: province ?? "Konum bilgisi bekleniyor",
+    province: province ?? "",
+    phone: null,
+    internationalPhone: null,
+    websiteUri: null,
+    googleMapsUri: `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(placeId)}`,
+    businessStatus: "UNKNOWN",
+    primaryType: sector ?? "business",
+    sector: sector ?? undefined,
+    rating: null,
+    userRatingCount: 0,
+  };
+}
+
+type StatRow = Pick<LeadRecord, "status" | "contacted_at" | "next_follow_up_at" | "lead_type" | "source_province" | "source_sector">;
+
+function calculateStats(rows: StatRow[], dailyGoal: number) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const week = new Date(); week.setDate(week.getDate() - 7);
-  return { today: contacted.filter((item) => new Date(item.contacted_at!) >= today).length, week: contacted.filter((item) => new Date(item.contacted_at!) >= week).length, total: contacted.length, customers: mockStore.records.filter((item) => item.status === "customer").length };
+  const contacted = rows.filter((row) => row.contacted_at);
+  const customers = rows.filter((row) => row.status === "customer").length;
+  const pipeline = Object.fromEntries(DB_STATUSES.map((status) => [status, rows.filter((row) => row.status === status).length]));
+  return {
+    today: contacted.filter((row) => new Date(row.contacted_at!) >= today).length,
+    week: contacted.filter((row) => new Date(row.contacted_at!) >= week).length,
+    total: contacted.length,
+    replies: rows.filter((row) => REPLY_STATUSES.includes(row.status)).length,
+    interested: rows.filter((row) => INTERESTED_STATUSES.includes(row.status)).length,
+    customers,
+    due: rows.filter((row) => PIPELINE_STATUSES.includes(row.status) && row.next_follow_up_at && row.next_follow_up_at <= endOfToday()).length,
+    dailyGoal,
+    conversionRate: contacted.length ? Math.round((customers / contacted.length) * 1000) / 10 : 0,
+    pipeline,
+    segments: segmentStats(rows),
+  };
+}
+
+function segmentStats(rows: StatRow[]) {
+  const groups = new Map<string, { label: string; contacts: number; replies: number; customers: number }>();
+  for (const row of rows) {
+    if (!row.contacted_at) continue;
+    const label = [row.source_sector, row.source_province].filter(Boolean).join(" · ") || "Kaynağı bilinmeyen";
+    const group = groups.get(label) ?? { label, contacts: 0, replies: 0, customers: 0 };
+    group.contacts += 1;
+    if (REPLY_STATUSES.includes(row.status)) group.replies += 1;
+    if (row.status === "customer") group.customers += 1;
+    groups.set(label, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, responseRate: Math.round((group.replies / group.contacts) * 100) }))
+    .sort((a, b) => b.customers - a.customers || b.responseRate - a.responseRate || b.contacts - a.contacts)
+    .slice(0, 5);
 }
 
 async function realStats(userId: string) {
   const supabase = await createSupabaseServerClient();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const week = new Date(); week.setDate(week.getDate() - 7);
-  const [todayResult, weekResult, totalResult, customerResult] = await Promise.all([
-    supabase.from("lead_records").select("id", { count: "exact", head: true }).eq("user_id", userId).not("contacted_at", "is", null).gte("contacted_at", today.toISOString()),
-    supabase.from("lead_records").select("id", { count: "exact", head: true }).eq("user_id", userId).not("contacted_at", "is", null).gte("contacted_at", week.toISOString()),
-    supabase.from("lead_records").select("id", { count: "exact", head: true }).eq("user_id", userId).not("contacted_at", "is", null),
-    supabase.from("lead_records").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "customer"),
-  ]);
-  return { today: todayResult.count ?? 0, week: weekResult.count ?? 0, total: totalResult.count ?? 0, customers: customerResult.count ?? 0 };
+  const rows: StatRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from("lead_records").select("status,contacted_at,next_follow_up_at,lead_type,source_province,source_sector").eq("user_id", userId).range(from, from + 999);
+    if (error) throw error;
+    rows.push(...((data ?? []) as StatRow[]));
+    if (!data || data.length < 1000) break;
+  }
+  const { data: settings, error } = await supabase.from("app_settings").select("daily_contact_goal").eq("user_id", userId).maybeSingle();
+  if (error) throw error;
+  return calculateStats(rows, settings?.daily_contact_goal ?? 20);
 }

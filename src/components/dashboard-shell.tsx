@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Calculator, Globe2, LogOut, MessageCircleMore, Settings } from "lucide-react";
+import { Building2, Calculator, Globe2, Handshake, LogOut, MessageCircleMore, Settings } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const nav = [
   { href: "/website", label: "Web Sitesi Adayları", icon: Globe2 },
   { href: "/accounting", label: "Ön Muhasebe Adayları", icon: Calculator },
-  { href: "/contacted", label: "Mesaj Gönderilenler", icon: MessageCircleMore },
+  { href: "/contacted", label: "Satış Merkezi", icon: MessageCircleMore },
+  { href: "/partners", label: "Referans Ağı", icon: Handshake },
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 

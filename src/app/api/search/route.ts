@@ -99,8 +99,8 @@ export async function POST(request: Request) {
       ).slice(0, target - found.length);
 
       if (eligible.length) {
-        const rows = eligible.map((place) => ({ user_id: user.id, place_id: place.placeId, lead_type: leadType, status: "new" }));
-        const { data: inserted, error } = await supabase.from("lead_records").upsert(rows, { onConflict: "place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,created_at");
+        const rows = eligible.map((place) => ({ user_id: user.id, place_id: place.placeId, lead_type: leadType, status: "new", source_province: province, source_sector: sector }));
+        const { data: inserted, error } = await supabase.from("lead_records").upsert(rows, { onConflict: "user_id,place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at");
         if (error) throw error;
         const byId = new Map(eligible.map((place) => [place.placeId, place]));
         for (const db of inserted ?? []) {

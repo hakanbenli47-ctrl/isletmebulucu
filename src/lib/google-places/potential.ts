@@ -30,6 +30,7 @@ const ACCOUNTING_PRIMARY_TYPE_PRIORITY = [
 export interface PotentialAssessment {
   eligible: boolean;
   level: "high" | "standard";
+  score: number;
   reason: string;
 }
 
@@ -43,13 +44,13 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
       : quality === "broad"
         ? rating >= 3.8 && reviews >= 2 && reviews <= 500
         : rating >= 4 && reviews >= 5 && reviews <= 250;
-    const high = eligible && rating >= 4.5 && reviews >= 10 && reviews <= 120;
+    const score = websiteScore(place);
+    const high = eligible && score >= 75;
     return {
       eligible,
       level: high ? "high" : "standard",
-      reason: high
-        ? `${formatRating(rating)} puan · ${reviews} yorum · güçlü yerel görünürlük`
-        : `${formatRating(rating)} puan · ${reviews} yorum`,
+      score,
+      reason: `${score}/100 potansiyel · ${formatRating(rating)} puan · ${reviews} yorum`,
     };
   }
 
@@ -62,13 +63,15 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
     : quality === "broad"
       ? rating >= 3 && reviews >= 1 && reviews <= 500
       : rating >= 3.5 && reviews >= 2 && reviews <= 300;
-  const high = eligible && rating >= 4 && reviews >= 3 && reviews <= 120 && prioritySector;
+  const score = accountingScore(place, prioritySector);
+  const high = eligible && score >= 75;
   return {
     eligible,
     level: high ? "high" : "standard",
+    score,
     reason: high
-      ? `${place.sector ?? "Stok/cari yoğun sektör"} · ön muhasebeye uygun · ${formatRating(rating)} puan · ${reviews} yorum`
-      : `${formatRating(rating)} puan · ${reviews} yorum`,
+      ? `${score}/100 potansiyel · ${place.sector ?? "stok/cari yoğun sektör"}`
+      : `${score}/100 potansiyel · ${formatRating(rating)} puan · ${reviews} yorum`,
   };
 }
 
@@ -77,7 +80,7 @@ export function withPotential(place: PlaceDetails, leadType: LeadType): PlaceDet
     return { ...place, potentialLevel: "standard", potentialReason: undefined };
   }
   const assessment = assessPotential(place, leadType);
-  return { ...place, potentialLevel: assessment.level, potentialReason: assessment.reason };
+  return { ...place, potentialLevel: assessment.level, potentialScore: assessment.score, potentialReason: assessment.reason };
 }
 
 export function orderPotentialPlaces(places: PlaceDetails[], leadType: LeadType): PlaceDetails[] {
@@ -112,4 +115,24 @@ function reviewBand(count: number) {
 
 function formatRating(rating: number) {
   return rating.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function websiteScore(place: PlaceDetails) {
+  const rating = place.rating ?? 0;
+  const reviews = place.userRatingCount;
+  const ratingPoints = rating >= 4.7 ? 35 : rating >= 4.4 ? 31 : rating >= 4 ? 25 : rating >= 3.8 ? 17 : 5;
+  const reviewPoints = reviews >= 10 && reviews <= 120 ? 30 : reviews >= 5 && reviews <= 250 ? 24 : reviews >= 2 && reviews <= 500 ? 14 : 5;
+  const websiteNeed = place.websiteUri ? 5 : 20;
+  const contactPoints = place.phone || place.internationalPhone ? 15 : 0;
+  return Math.min(100, ratingPoints + reviewPoints + websiteNeed + contactPoints);
+}
+
+function accountingScore(place: PlaceDetails, prioritySector: boolean) {
+  const rating = place.rating ?? 0;
+  const reviews = place.userRatingCount;
+  const sectorPoints = prioritySector ? 40 : 22;
+  const ratingPoints = rating >= 4.5 ? 25 : rating >= 4 ? 22 : rating >= 3.5 ? 17 : 8;
+  const reviewPoints = reviews >= 3 && reviews <= 120 ? 20 : reviews >= 1 && reviews <= 300 ? 14 : 6;
+  const contactPoints = place.phone || place.internationalPhone ? 15 : 0;
+  return Math.min(100, sectorPoints + ratingPoints + reviewPoints + contactPoints);
 }

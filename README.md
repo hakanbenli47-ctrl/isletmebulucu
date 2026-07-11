@@ -1,8 +1,8 @@
 # İşletme Bulucu
 
-İşletme Bulucu; Türkiye genelindeki satış adaylarını Google Places API (New) ile bulan, adayları Supabase üzerinde Place ID ile takip eden ve WhatsApp iletişim geçmişini yöneten özel kullanımlı bir Next.js uygulamasıdır.
+İşletme Bulucu; Türkiye genelindeki satış adaylarını Google Places API (New) ile bulan, açıklanabilir kurallarla puanlayan, görüşme ve takip aşamalarını yöneten ve referans ortaklarından gelen işleri ölçen özel kullanımlı bir Next.js satış ağıdır.
 
-Google'dan alınan işletme adı, adresi, telefonu ve web sitesi kalıcı olarak veritabanına yazılmaz. Supabase yalnızca Place ID, aday türü ve kullanıcı tarafından verilen durumları saklar. İşletme ayrıntıları görünür sayfa için Google Places'tan canlı alınır.
+Google'dan alınan işletme adı, adresi, telefonu ve web sitesi kalıcı olarak veritabanına yazılmaz. Supabase yalnızca Place ID, aday türü, aramada kullanılan şehir/sektör ve kullanıcı tarafından oluşturulan satış durumlarını saklar. İşletme ayrıntıları görünür sayfa için Google Places'tan canlı alınır.
 
 ## 1. Yerelde çalıştırma
 
@@ -44,6 +44,16 @@ NEXT_PUBLIC_USE_MOCK_DATA=false
 4. **Run** düğmesiyle bir kez çalıştırın.
 
 Uygulama bu dosyayı kendisi çalıştırmaz. SQL; tabloları, doğrulama kısıtlarını, indeksleri, `updated_at` tetikleyicilerini ve kullanıcıya özel RLS politikalarını oluşturur.
+
+### Daha önce şemayı kurduysanız
+
+Mevcut kayıtları silmeyin ve `schema.sql` dosyasını yeniden çalıştırmayın. Supabase **SQL Editor** içinde yeni sorgu açıp yalnızca aşağıdaki yükseltme dosyasının tamamını bir kez çalıştırın:
+
+```text
+supabase/migrations/20260711190000_sales_network.sql
+```
+
+Bu yükseltme mevcut adayları korur; satış aşamaları, takip tarihleri, faaliyet geçmişi ve referans ağı tablolarını ekler.
 
 ## 5. Supabase Auth kullanıcısı oluşturma
 
@@ -102,19 +112,24 @@ npm test
 npm run build
 ```
 
-Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıflandırma, arama sırası ve Place ID tekrar engelleme kurallarını kapsar.
+Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıflandırma, potansiyel puanlama, arama sırası ve Place ID tekrar engelleme kurallarını kapsar.
 
 ## Önemli davranışlar
 
 - WhatsApp düğmesi mesajı otomatik göndermez; yalnızca hazır mesajla konuşmayı açar.
-- Düğmeye basılması uygulamada `Mesaj gönderildi` kabul edilir ve 10 saniye geri alma seçeneği sunulur.
+- İlk mesaj açıldığında aday otomatik olarak `İlk mesaj gönderildi` aşamasına alınır ve ilk takip tarihi planlanır.
 - `Google işletme profilinde bağımsız web sitesi görünmüyor` ifadesi yalnızca Google profilindeki website alanını anlatır; internette hiç site olmadığını garanti etmez.
-- Aynı Place ID uygulama genelinde bir kez saklanır ve farklı aday türünde yeniden gösterilmez.
+- Aynı Place ID her kullanıcı için bir kez saklanır ve farklı aday türünde yeniden gösterilmez.
 - Şehirler alfabetik değil, ticari hareketlilik önceliğiyle taranır.
-- Web sitesi adaylarında en az 4,0 puan ve 5–250 yorum; ön muhasebe adaylarında en az 3,8 puan ve 8–500 yorum aranır.
+- Web sitesi adaylarında dengeli profilde en az 4,0 puan ve 5–250 yorum; ön muhasebe adaylarında en az 3,5 puan ve 2–300 yorum aranır.
 - Ön muhasebede stok/cari hareketi yoğun sabit sektörler, web sitesi adaylarında güçlü yerel görünürlük sinyali bulunan işletmeler önce gösterilir.
 - Aday ekranlarında şehir ve meslek/sektör filtresiyle hedefli arama yapılabilir.
 - `Dengeli`, `Seçici` ve `Geniş` kalite profilleriyle aday havuzunun sıkılığı değiştirilebilir; kurallar sabittir ve yapay zekâ kullanılmaz.
 - Ön muhasebe sektörleri toptan satış, dağıtım, tedarik, üretim ve stok hareketi yüksek işletmelere odaklanır.
 - Masaüstünde WhatsApp uygulaması (sekmesiz) veya WhatsApp Web (tek çalışma sekmesi) seçilebilir.
 - Google kota veya geçici detay hatasında liste tamamen çökmez; Place ID kayıtları korunur ve erişilemeyen detaylar açıkça belirtilir.
+- Satış Merkezi; cevap, ilgi, demo, takip, müşteri ve iletişim istememe aşamalarını; görüşme notlarını ve sıradaki takip tarihini yönetir.
+- İlk takip varsayılan olarak 3., son takip 7. gündedir. Varsayılan iki takip sınırından sonra yeni takip mesajı kapatılır.
+- `İletişim istemiyor` aşamasındaki kayıtlarda WhatsApp takibi kapatılır.
+- Referans Ağı; mali müşavir, bilgisayarcı, matbaa, tedarikçi ve mevcut müşterilerden gelen tavsiyeleri manuel olarak ölçer.
+- Şehir/sektör performansı sadece sizin satış sonuçlarınızdan hesaplanır; yapay zekâ kullanılmaz.

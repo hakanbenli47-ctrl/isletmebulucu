@@ -3,24 +3,25 @@ import type { AppSettings } from "@/types";
 
 export const DEFAULT_WEBSITE_MESSAGE = `Merhaba, iyi çalışmalar.
 
-Sitemix olarak işletmenizin dijitalde daha güvenilir ve profesyonel görünmesi için tasarımından yayına alınmasına kadar tüm süreci kapsayan anahtar teslim web siteleri hazırlıyoruz.
+Google işletme profilinizde bağımsız bir web sitesi göremedim. İşletmeniz için mobil uyumlu, WhatsApp ve harita bağlantılı ücretsiz bir örnek ana sayfa hazırlayabilirim.
 
-Hazırladığımız mobil uyumlu sitelerde müşterileriniz size WhatsApp, telefon ve konum üzerinden kolayca ulaşabilir; hizmetlerinizi ve çalışmalarınızı tek yerde inceleyebilir.
+Anahtar teslim örneği görmek ister misiniz?
 
-İşletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp sunabiliriz. Uygun görürseniz örnek çalışmayı paylaşalım.
-
-Sitemix
-www.sitemix.com.tr`;
+Sitemix · www.sitemix.com.tr
+Bu konuda tekrar yazmamamızı isterseniz “istemiyorum” demeniz yeterlidir.`;
 
 export const DEFAULT_ACCOUNTING_MESSAGE = `Merhaba, iyi çalışmalar.
 
-Sitemix Ön Muhasebe; toptan satış, stok ve cari hareketi bulunan işletmelerin kasa, borç-alacak ve ürün takibini tek panelden yönetebilmesi için geliştirilmiştir.
+Toptan ve stoklu çalışan işletmeler için cari, stok, kasa ve borç-alacak takibini kolaylaştıran Sitemix Ön Muhasebe’yi geliştiriyoruz.
 
-Hızlı kurulum, anlaşılır kullanım, PDF çıktıları ve WhatsApp bilgilendirme özellikleriyle günlük işlemleri düzenli ve pratik hale getirir.
+7 günlük ücretsiz deneme bağlantısını paylaşmamı ister misiniz?
 
-Sistemi 7 gün ücretsiz deneyebilirsiniz. Kısa tanıtım ve deneme bağlantısını paylaşalım mı?
+Sitemix
+Bu konuda tekrar yazmamamızı isterseniz “istemiyorum” demeniz yeterlidir.`;
 
-Sitemix`;
+export const DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE = `Merhaba, birkaç gün önce işletmeniz için ücretsiz anahtar teslim web sitesi örneği hakkında yazmıştım. Uygunsanız kısa bir örnek paylaşabilirim. Tekrar yazmamamı isterseniz “istemiyorum” demeniz yeterlidir.`;
+
+export const DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE = `Merhaba, birkaç gün önce Sitemix Ön Muhasebe'nin 7 günlük ücretsiz denemesi hakkında yazmıştım. Uygunsanız kısa tanıtım bağlantısını paylaşabilirim. Tekrar yazmamamı isterseniz “istemiyorum” demeniz yeterlidir.`;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   resultsPerSearch: 10,
@@ -29,4 +30,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accountingSectors: [...ACCOUNTING_SECTORS],
   websiteMessage: DEFAULT_WEBSITE_MESSAGE,
   accountingMessage: DEFAULT_ACCOUNTING_MESSAGE,
+  websiteFollowUpMessage: DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE,
+  accountingFollowUpMessage: DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE,
+  firstFollowUpDays: 3,
+  finalFollowUpDays: 7,
+  maxFollowUps: 2,
 };
