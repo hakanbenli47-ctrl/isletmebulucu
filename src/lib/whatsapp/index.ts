@@ -15,3 +15,21 @@ export function buildWhatsAppUrl(phone: string, message: string): string | null 
   if (!normalized) return null;
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
+
+export function personalizeWhatsAppMessage(message: string, businessName: string): string {
+  const safeName = businessName
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  if (!safeName) return message;
+
+  const greeting = `Merhaba, ${safeName} yetkilisi. İyi çalışmalar.`;
+  const cleanMessage = message.trim();
+  const defaultGreeting = /^Merhaba,\s*iyi çalışmalar\.\s*/i;
+
+  if (defaultGreeting.test(cleanMessage)) {
+    return cleanMessage.replace(defaultGreeting, `${greeting}\n\n`);
+  }
+  return `${greeting}\n\n${cleanMessage}`;
+}

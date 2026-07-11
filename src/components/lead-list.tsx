@@ -1,10 +1,42 @@
 "use client";
 
+import { useRef } from "react";
 import { Archive, Ban, CircleOff, ExternalLink, MessageCircle, Star, UserRoundCheck } from "lucide-react";
-import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { buildWhatsAppUrl, personalizeWhatsAppMessage } from "@/lib/whatsapp";
 import type { LeadRecord, LeadStatus, LeadType } from "@/types";
 
 export default function LeadList({ leads, leadType, loading, whatsappMessage = "", onContact, onStatus, contacted = false }: { leads: LeadRecord[]; leadType?: LeadType; loading: boolean; whatsappMessage?: string; onContact?: (lead: LeadRecord) => void; onStatus: (lead: LeadRecord, status: LeadStatus) => void; contacted?: boolean }) {
+  const reusableWhatsAppWindow = useRef<Window | null>(null);
+
+  function openWhatsApp(event: React.MouseEvent<HTMLAnchorElement>, url: string, lead: LeadRecord) {
+    event.preventDefault();
+    onContact?.(lead);
+
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      window.location.assign(url);
+      return;
+    }
+
+    if (reusableWhatsAppWindow.current && !reusableWhatsAppWindow.current.closed) {
+      try {
+        reusableWhatsAppWindow.current.location.href = url;
+        reusableWhatsAppWindow.current.focus();
+        return;
+      } catch {
+        reusableWhatsAppWindow.current = null;
+      }
+    }
+
+    const whatsappWindow = window.open(url, "isletme-bulucu-whatsapp");
+    if (!whatsappWindow) {
+      window.location.assign(url);
+      return;
+    }
+    reusableWhatsAppWindow.current = whatsappWindow;
+    try { whatsappWindow.opener = null; } catch { /* Tarayıcı erişimi kısıtlarsa bağlantı yine çalışır. */ }
+    whatsappWindow.focus();
+  }
+
   if (loading) return <div className="state"><span className="spinner" />İşletmeler yükleniyor…</div>;
   if (!leads.length) return <div className="empty-state"><strong>Gösterilecek işletme yok</strong><span>{contacted ? "Bu filtrede iletişim kaydı bulunamadı." : "Yeni bir tarama başlatarak aday listenizi oluşturun."}</span></div>;
   return (
@@ -13,7 +45,8 @@ export default function LeadList({ leads, leadType, loading, whatsappMessage = "
         <div className="lead-head" role="row"><span>İşletme</span><span>Konum ve sektör</span><span>Telefon / web</span>{contacted && <span>İletişim</span>}<span className="right">İşlemler</span></div>
         {leads.map((lead) => {
           const place = lead.details;
-          const whatsappUrl = buildWhatsAppUrl(place.internationalPhone ?? place.phone ?? "", whatsappMessage);
+          const personalizedMessage = personalizeWhatsAppMessage(whatsappMessage, place.name);
+          const whatsappUrl = buildWhatsAppUrl(place.internationalPhone ?? place.phone ?? "", personalizedMessage);
           return <article className="lead-row" role="row" key={lead.place_id}>
             <div className="lead-name"><div><strong>{place.name}</strong><div className="badges">{place.isDemo && <span className="badge demo">Demo veri</span>}{place.potentialLevel === "high" && <span className="badge potential">Öncelikli aday</span>}{leadType === "website" && <span className="badge warning">Web sitesi görünmüyor</span>}</div><span className="rating-line"><Star size={13} fill="currentColor" />{place.rating?.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) ?? "—"}<span>· {place.userRatingCount} yorum</span></span></div><a className="maps-source" href={place.googleMapsUri} target="_blank" rel="noreferrer">Google Maps <ExternalLink size={13} /></a></div>
             <div className="lead-location"><strong>{place.province || "Şehir bilgisi yok"}</strong><span>{place.address}</span><small>{formatType(place.sector ?? place.primaryType)}</small>{place.potentialReason && <small className="potential-reason">{place.potentialReason}</small>}</div>
@@ -21,7 +54,7 @@ export default function LeadList({ leads, leadType, loading, whatsappMessage = "
             {contacted && <div className="contact-date"><strong>{lead.lead_type === "website" ? "Web sitesi" : "Ön muhasebe"}</strong><span>{lead.contacted_at ? new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.contacted_at)) : "—"}</span></div>}
             <div className="lead-actions">
               {!contacted && (whatsappUrl
-                ? <a className="action-button whatsapp-button" href={whatsappUrl} target="_blank" rel="noopener noreferrer" title="WhatsApp'ta aç" onClick={() => onContact?.(lead)}><MessageCircle size={16} />WhatsApp</a>
+                ? <a className="action-button whatsapp-button" href={whatsappUrl} title="WhatsApp'ta aç" onClick={(event) => openWhatsApp(event, whatsappUrl, lead)}><MessageCircle size={16} />WhatsApp</a>
                 : <button className="whatsapp-button" disabled title="Geçerli cep telefonu yok"><MessageCircle size={16} />WhatsApp</button>)}
               <a className="action-button" href={place.googleMapsUri} target="_blank" rel="noreferrer"><ExternalLink size={15} />Harita</a>
               <button className="action-button danger" onClick={() => onStatus(lead, "not_suitable")}><Ban size={15} />Uygun Değil</button>
