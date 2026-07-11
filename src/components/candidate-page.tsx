@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Search, Undo2 } from "lucide-react";
 import { useLeads } from "@/hooks/use-leads";
 import LeadList from "@/components/lead-list";
-import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import type { AppSettings, LeadRecord, LeadStatus, LeadType } from "@/types";
 
 export default function CandidatePage({ leadType, title, description }: { leadType: LeadType; title: string; description: string }) {
@@ -54,9 +53,6 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
   }
 
   async function contact(lead: LeadRecord) {
-    const url = buildWhatsAppUrl(lead.details.internationalPhone ?? lead.details.phone ?? "", message);
-    if (!url) return;
-    window.open(url, "_blank", "noopener,noreferrer");
     try { await changeStatus(lead, "contacted"); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Durum güncellenemedi."); }
   }
@@ -75,7 +71,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
       <div className="page-heading"><div><p className="eyebrow">Aday havuzu</p><h1>{title}</h1><p>{description}</p></div><button onClick={search} disabled={searching} className="primary-button search-button"><Search size={19} />{searching ? "İşletmeler aranıyor…" : "50 Yeni İşletme Bul"}</button></div>
       {notice && <div className="notice success" role="status">{notice}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
-      <LeadList leads={leads} leadType={leadType} loading={loading} onContact={contact} onStatus={changeStatus} />
+      <LeadList leads={leads} leadType={leadType} loading={loading} whatsappMessage={message} onContact={contact} onStatus={changeStatus} />
       <Pagination page={page} total={total} onPage={setPage} />
       {undoLead && <div className="undo-toast"><span><strong>{undoLead.details.name}</strong> mesaj gönderilenlere taşındı.</span><button onClick={undo}><Undo2 size={16} />Geri Al</button><span className="undo-progress" /></div>}
     </section>
