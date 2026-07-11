@@ -27,6 +27,9 @@ export interface PlaceDetails {
   primaryType: string;
   rating: number | null;
   userRatingCount: number;
+  instagramActivity?: "active" | "inactive" | "unverified";
+  instagramLastPostAt?: string;
+  instagramFollowers?: number;
   potentialLevel?: "high" | "standard";
   potentialScore?: number;
   potentialReason?: string;
@@ -56,8 +59,10 @@ export interface AppSettings {
   accountingSectors: string[];
   websiteMessage: string;
   accountingMessage: string;
+  instagramMessage: string;
   websiteFollowUpMessage: string;
   accountingFollowUpMessage: string;
+  instagramFollowUpMessage: string;
   firstFollowUpDays: number;
   finalFollowUpDays: number;
   maxFollowUps: number;

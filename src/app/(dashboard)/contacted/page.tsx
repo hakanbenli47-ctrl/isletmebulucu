@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, ExternalLink, Laptop, MessageCircle, Save, Target, TrendingUp, UsersRound } from "lucide-react";
 import { buildWhatsAppDesktopUrl, buildWhatsAppWebUrl, personalizeWhatsAppMessage } from "@/lib/whatsapp";
+import { isInstagramProfile } from "@/lib/google-places/website";
 import type { AppSettings, LeadRecord, LeadStatus } from "@/types";
 
 type Filter = LeadStatus | "pipeline" | "due";
@@ -97,7 +98,9 @@ function CrmLeadCard({ lead, settings, onUpdated, onError }: { lead: LeadRecord;
   const [followUp, setFollowUp] = useState(toLocalInput(lead.next_follow_up_at));
   const [saving, setSaving] = useState(false);
   const phone = lead.details.internationalPhone ?? lead.details.phone ?? "";
-  const template = lead.lead_type === "website" ? settings?.websiteFollowUpMessage : settings?.accountingFollowUpMessage;
+  const template = lead.lead_type === "website"
+    ? isInstagramProfile(lead.details.websiteUri) ? settings?.instagramFollowUpMessage : settings?.websiteFollowUpMessage
+    : settings?.accountingFollowUpMessage;
   const message = personalizeWhatsAppMessage(template ?? "Merhaba, önceki mesajımla ilgili dönüşünüzü bekliyorum.", lead.details.name);
   const desktopUrl = buildWhatsAppDesktopUrl(phone, message);
   const webUrl = buildWhatsAppWebUrl(phone, message);

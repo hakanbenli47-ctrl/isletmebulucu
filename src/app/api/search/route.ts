@@ -8,8 +8,9 @@ import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
 import { searchPlaces } from "@/lib/google-places/client";
 import { filterNewPlaceIds } from "@/lib/google-places/dedupe";
 import { advanceSearchPosition } from "@/lib/google-places/progress";
-import { isIndependentWebsite } from "@/lib/google-places/website";
+import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "@/lib/google-places/website";
 import { assessPotential, orderPotentialPlaces } from "@/lib/google-places/potential";
+import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadRecord, PlaceDetails } from "@/types";
@@ -19,6 +20,7 @@ const inputSchema = z.object({
   province: z.enum(TURKIYE_ILLERI).optional(),
   sector: z.string().trim().min(2).max(100).optional(),
   quality: z.enum(["recommended", "selective", "broad"]).default("recommended"),
+  presence: z.enum(["all", "instagram", "no_social"]).default("all"),
 });
 
 async function allExistingPlaceIds(userId: string) {
@@ -36,7 +38,7 @@ async function allExistingPlaceIds(userId: string) {
 export async function POST(request: Request) {
   try {
     const user = await requireApiUser();
-    const { leadType, province: requestedProvince, sector: requestedSector, quality } = inputSchema.parse(await request.json());
+    const { leadType, province: requestedProvince, sector: requestedSector, quality, presence } = inputSchema.parse(await request.json());
 
     if (isMockMode()) {
       const target = mockStore.settings.resultsPerSearch;
@@ -74,7 +76,8 @@ export async function POST(request: Request) {
     while (apiCalls < maxCalls && found.length < target) {
       const province = requestedProvince ?? (requestedSector ? TURKIYE_ILLERI[filteredProvinceIndex] : TURKIYE_ILLERI[position.provinceIndex]);
       const sector = requestedSector ?? (requestedProvince ? activeSectors[filteredSectorIndex] : activeSectors[position.sectorIndex]);
-      const results = await searchPlaces(`${sector} ${province}`, sector, province);
+      const searchResults = await searchPlaces(`${sector} ${province}`, sector, province);
+      const results = leadType === "website" ? await enrichInstagramActivity(searchResults) : searchResults;
       apiCalls += 1;
 
       if (requestedProvince && requestedSector) {
@@ -93,6 +96,7 @@ export async function POST(request: Request) {
           place.businessStatus === "OPERATIONAL" &&
           Boolean(place.phone || place.internationalPhone) &&
           (leadType === "accounting" || !isIndependentWebsite(place.websiteUri)) &&
+          matchesPresence(place.websiteUri, leadType, presence) &&
           assessPotential(place, leadType, quality).eligible,
         ), leadType),
         seen,
@@ -135,7 +139,8 @@ export async function POST(request: Request) {
       .map(({ db, details }) => ({ ...db, details }))
       .sort((a, b) => (detailOrder.get(a.place_id) ?? 999) - (detailOrder.get(b.place_id) ?? 999));
     const limited = found.length < target;
-    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, message: limited ? `Bu taramada ${found.length} yeni işletme bulundu. Sonraki aramada kaldığınız yerden devam edebilirsiniz.` : `${found.length} yeni işletme bulundu.` });
+    const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
+    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, message: limited ? `Bu taramada ${found.length}${channel} yeni işletme bulundu. Seçilen kanal filtresine uymayan işletmeler gösterilmedi.` : `${found.length}${channel} yeni işletme bulundu.` });
   } catch (error) {
     return apiError(error);
   }
@@ -146,4 +151,10 @@ function sanitizeSectors(value: unknown, allowed: readonly string[]) {
   if (value.some((item) => typeof item === "string" && !allowed.includes(item))) return [...allowed];
   const clean = value.filter((item): item is string => typeof item === "string" && allowed.includes(item));
   return clean.length ? clean : [...allowed];
+}
+
+function matchesPresence(uri: string | null | undefined, leadType: "website" | "accounting", presence: "all" | "instagram" | "no_social") {
+  if (leadType === "accounting" || presence === "all") return true;
+  if (presence === "instagram") return isInstagramProfile(uri);
+  return socialProfileType(uri) === null;
 }

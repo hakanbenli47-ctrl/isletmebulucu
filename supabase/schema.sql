@@ -47,6 +47,8 @@ create table public.app_settings (
   accounting_sectors jsonb not null default '[]'::jsonb,
   website_follow_up_message text not null default '',
   accounting_follow_up_message text not null default '',
+  instagram_message text not null default '',
+  instagram_follow_up_message text not null default '',
   first_follow_up_days integer not null default 3 check (first_follow_up_days between 1 and 30),
   final_follow_up_days integer not null default 7 check (final_follow_up_days between 2 and 60),
   max_follow_ups integer not null default 2 check (max_follow_ups between 0 and 3),

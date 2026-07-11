@@ -80,12 +80,17 @@ a { color: inherit; text-decoration: none; }
 .badge.potential { background: #dff5e9; color: #087044; }
 .badge.score { background: #eef2f0; color: #44504b; }
 .badge.type { background: #eef3fa; color: #345b81; }
+.badge.instagram { background: #f5e8f3; color: #8a276f; }
+.badge.instagram-active { background: #dcf6e8; color: #087044; }
+.badge.instagram-inactive { background: #fff0e2; color: #955600; }
+.badge.instagram-unverified { background: #f0f1f2; color: #68716e; }
 .rating-line { display: flex; align-items: center; gap: 4px; margin-top: 8px; color: #a86400; font-size: 11px; font-weight: 800; }
 .rating-line span { color: var(--muted); font-weight: 550; }
 .lead-location strong, .lead-contact a, .contact-date strong { font-size: 12px; }
 .lead-location span, .lead-contact span, .contact-date span { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .lead-location small { width: fit-content; color: var(--green-dark); font-size: 10px; font-weight: 700; }
 .lead-location .potential-reason { color: #6d7773; font-weight: 500; }
+.instagram-source { width: fit-content; display: inline-flex; align-items: center; gap: 5px; color: #9b2b78; font-size: 11px; font-weight: 750; }
 .lead-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .lead-actions button, .action-button { min-height: 34px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: white; color: #47514e; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .lead-actions .whatsapp-button { color: white; background: var(--wa); border-color: var(--wa); }
@@ -101,6 +106,7 @@ a { color: inherit; text-decoration: none; }
 .whatsapp-options small { color: var(--muted); font-size: 9px; }
 .whatsapp-options .mobile-option { display: none; }
 .lead-actions .danger { color: var(--danger); }
+.lead-actions .instagram-button { color: #92246f; border-color: #e3c2da; }
 .more-actions { width: 100%; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .google-attribution { margin: 0; padding: 9px 18px; border-top: 1px solid var(--line); color: #7c8682; background: #fafbfb; font-size: 10px; text-align: right; }
 .lead-table-wrap { overflow-x: auto; }

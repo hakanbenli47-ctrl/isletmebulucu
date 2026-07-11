@@ -55,6 +55,12 @@ supabase/migrations/20260711190000_sales_network.sql
 
 Bu yükseltme mevcut adayları korur; satış aşamaları, takip tarihleri, faaliyet geçmişi ve referans ağı tablolarını ekler.
 
+Instagram kanalı güncellemesi için daha sonra şu dosyayı da bir kez çalıştırın:
+
+```text
+supabase/migrations/20260711210000_instagram_channel.sql
+```
+
 ## 5. Supabase Auth kullanıcısı oluşturma
 
 Herkese açık kayıt ekranı yoktur. Kullanıcıyı manuel ekleyin:
@@ -104,6 +110,18 @@ GOOGLE_PLACES_MAX_CALLS_PER_SEARCH=20
 
 Varsayılan değer 20'dir. Limit dolmadan 50 uygun yeni işletme bulunamazsa bulunanlar kaydedilir ve sonraki arama aynı şehir/sektör sırasından devam eder. Görünür listedeki işletme ayrıntıları için ayrıca Place Details çağrıları yapılır.
 
+## 10. İsteğe bağlı Instagram etkinlik kontrolü
+
+Google işletme profilindeki Instagram bağlantılarını ayırmak için Meta anahtarı gerekmez. Hesabın son paylaşımını resmi Meta API ile doğrulamak isterseniz profesyonel Instagram hesabınızın bilgilerini sunucu değişkenlerine ekleyin:
+
+```env
+META_INSTAGRAM_USER_ID=
+META_INSTAGRAM_ACCESS_TOKEN=
+META_GRAPH_API_VERSION=v23.0
+```
+
+Bu alanlar boşsa işletme yine `Instagram var · site yok` olarak gösterilir; etkinlik durumu `doğrulanmadı` olur. Bağlantı sağlandığında son 90 günde paylaşım yapan profesyonel hesaplar `Instagram aktif` olarak işaretlenir. Erişim anahtarı tarayıcıya gönderilmez ve Instagram sayfaları kazınmaz.
+
 ## Kontroller
 
 ```bash
@@ -133,3 +151,5 @@ Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıfland
 - `İletişim istemiyor` aşamasındaki kayıtlarda WhatsApp takibi kapatılır.
 - Referans Ağı; mali müşavir, bilgisayarcı, matbaa, tedarikçi ve mevcut müşterilerden gelen tavsiyeleri manuel olarak ölçer.
 - Şehir/sektör performansı sadece sizin satış sonuçlarınızdan hesaplanır; yapay zekâ kullanılmaz.
+- Web adayları `Instagram var · site yok` kanalına göre aranabilir; Instagram bağlantısı ve uygun mesaj otomatik seçilir.
+- Ön muhasebe ilk temas ve takip mesajları kayıt bağlantısını içerir: `https://www.sitemix.com.tr/on-muhasebe/kayit`.

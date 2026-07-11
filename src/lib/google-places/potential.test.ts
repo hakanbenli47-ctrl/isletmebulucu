@@ -30,7 +30,7 @@ describe("potansiyel aday kuralları", () => {
   it("güçlü yerel web sitesi adayını öncelikli işaretler", () => {
     const result = assessPotential(place({ rating: 4.7, userRatingCount: 42 }), "website");
     expect(result.level).toBe("high");
-    expect(result.score).toBe(100);
+    expect(result.score).toBe(85);
   });
 
   it("ön muhasebede stok ve cari yoğun sektörü önceliklendirir", () => {
@@ -57,5 +57,11 @@ describe("potansiyel aday kuralları", () => {
       place({ placeId: "standart", rating: 4.2, userRatingCount: 20 }),
     ], "website");
     expect(ordered.map((item) => item.placeId)).toEqual(["öncelikli", "standart", "çok-yorum"]);
+  });
+
+  it("yakın zamanda paylaşım yapan Instagram adayına etkinlik puanı verir", () => {
+    const active = assessPotential(place({ websiteUri: "https://instagram.com/ornek", instagramActivity: "active" }), "website");
+    const inactive = assessPotential(place({ websiteUri: "https://instagram.com/ornek", instagramActivity: "inactive" }), "website");
+    expect(active.score).toBeGreaterThan(inactive.score);
   });
 });

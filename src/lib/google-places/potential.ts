@@ -1,4 +1,5 @@
 import type { LeadQuality, LeadType, PlaceDetails } from "@/types";
+import { isInstagramProfile } from "./website";
 
 const ACCOUNTING_SECTOR_PRIORITY = [
   "Gıda toptancısı",
@@ -50,7 +51,7 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
       eligible,
       level: high ? "high" : "standard",
       score,
-      reason: `${score}/100 potansiyel · ${formatRating(rating)} puan · ${reviews} yorum`,
+      reason: `${score}/100 potansiyel · ${formatRating(rating)} puan · ${reviews} yorum${place.instagramActivity === "active" ? " · Instagram aktif" : isInstagramProfile(place.websiteUri) ? " · Instagram bağlantısı var" : ""}`,
     };
   }
 
@@ -88,12 +89,14 @@ export function orderPotentialPlaces(places: PlaceDetails[], leadType: LeadType)
     .map((place) => withPotential(place, leadType))
     .sort((a, b) => {
       if (a.potentialLevel !== b.potentialLevel) return a.potentialLevel === "high" ? -1 : 1;
+      if (a.instagramActivity !== b.instagramActivity) return instagramActivityRank(a.instagramActivity) - instagramActivityRank(b.instagramActivity);
       if (leadType === "accounting") {
         const sectorDifference = sectorRank(a.sector) - sectorRank(b.sector);
         if (sectorDifference !== 0) return sectorDifference;
       }
       const reviewBandDifference = reviewBand(a.userRatingCount) - reviewBand(b.userRatingCount);
       if (reviewBandDifference !== 0) return reviewBandDifference;
+      if ((b.potentialScore ?? 0) !== (a.potentialScore ?? 0)) return (b.potentialScore ?? 0) - (a.potentialScore ?? 0);
       if ((b.rating ?? 0) !== (a.rating ?? 0)) return (b.rating ?? 0) - (a.rating ?? 0);
       return b.userRatingCount - a.userRatingCount;
     });
@@ -113,6 +116,13 @@ function reviewBand(count: number) {
   return 3;
 }
 
+function instagramActivityRank(activity?: PlaceDetails["instagramActivity"]) {
+  if (activity === "active") return 0;
+  if (activity === "unverified") return 1;
+  if (activity === "inactive") return 2;
+  return 3;
+}
+
 function formatRating(rating: number) {
   return rating.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
@@ -120,11 +130,12 @@ function formatRating(rating: number) {
 function websiteScore(place: PlaceDetails) {
   const rating = place.rating ?? 0;
   const reviews = place.userRatingCount;
-  const ratingPoints = rating >= 4.7 ? 35 : rating >= 4.4 ? 31 : rating >= 4 ? 25 : rating >= 3.8 ? 17 : 5;
-  const reviewPoints = reviews >= 10 && reviews <= 120 ? 30 : reviews >= 5 && reviews <= 250 ? 24 : reviews >= 2 && reviews <= 500 ? 14 : 5;
-  const websiteNeed = place.websiteUri ? 5 : 20;
+  const ratingPoints = rating >= 4.7 ? 30 : rating >= 4.4 ? 27 : rating >= 4 ? 22 : rating >= 3.8 ? 15 : 5;
+  const reviewPoints = reviews >= 10 && reviews <= 120 ? 25 : reviews >= 5 && reviews <= 250 ? 21 : reviews >= 2 && reviews <= 500 ? 12 : 5;
+  const websiteNeed = isInstagramProfile(place.websiteUri) ? 20 : place.websiteUri ? 8 : 15;
   const contactPoints = place.phone || place.internationalPhone ? 15 : 0;
-  return Math.min(100, ratingPoints + reviewPoints + websiteNeed + contactPoints);
+  const activityPoints = place.instagramActivity === "active" ? 10 : place.instagramActivity === "inactive" ? 0 : isInstagramProfile(place.websiteUri) ? 5 : 0;
+  return Math.min(100, ratingPoints + reviewPoints + websiteNeed + contactPoints + activityPoints);
 }
 
 function accountingScore(place: PlaceDetails, prioritySector: boolean) {

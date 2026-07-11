@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/auth";
 import { isMockMode } from "@/lib/config";
 import { getVisiblePlaceDetails } from "@/lib/google-places/client";
 import { orderPotentialPlaces, withPotential } from "@/lib/google-places/potential";
+import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadRecord, LeadStatus, LeadType, PlaceDetails } from "@/types";
@@ -66,7 +67,8 @@ export async function GET(request: Request) {
       getVisiblePlaceDetails((data ?? []).map((record) => record.place_id)),
       realStats(user.id),
     ]);
-    const detailsById = new Map(detailBatch.places.map((place) => [place.placeId, place]));
+    const visiblePlaces = await enrichInstagramActivity(detailBatch.places);
+    const detailsById = new Map(visiblePlaces.map((place) => [place.placeId, place]));
     let leads = (data ?? []).map((record) => {
       const detail = detailsById.get(record.place_id) ?? unavailablePlace(record.place_id, record.source_province, record.source_sector);
       return { ...record, details: withPotential(detail, record.lead_type as LeadType) } as LeadRecord;
