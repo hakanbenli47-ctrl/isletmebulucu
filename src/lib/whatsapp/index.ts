@@ -16,6 +16,18 @@ export function buildWhatsAppUrl(phone: string, message: string): string | null 
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
+export function buildWhatsAppDesktopUrl(phone: string, message: string): string | null {
+  const normalized = normalizeTurkishPhone(phone);
+  if (!normalized) return null;
+  return `whatsapp://send?phone=${normalized}&text=${encodeURIComponent(message)}`;
+}
+
+export function buildWhatsAppWebUrl(phone: string, message: string): string | null {
+  const normalized = normalizeTurkishPhone(phone);
+  if (!normalized) return null;
+  return `https://web.whatsapp.com/send?phone=${normalized}&text=${encodeURIComponent(message)}`;
+}
+
 export function personalizeWhatsAppMessage(message: string, businessName: string): string {
   const safeName = businessName
     .replace(/[\r\n\t]+/g, " ")

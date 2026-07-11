@@ -25,6 +25,13 @@ interface GooglePlace {
   userRatingCount?: number;
 }
 
+export class GooglePlacesError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "GooglePlacesError";
+  }
+}
+
 function apiKey() {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) throw new Error("Google Places API anahtarı tanımlı değil.");
@@ -64,8 +71,16 @@ async function googleFetch(url: string, init?: RequestInit) {
     cache: "no-store",
   });
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Google Places isteği başarısız (${response.status}): ${body.slice(0, 240)}`);
+    if (response.status === 429) {
+      throw new GooglePlacesError(429, "Google Places günlük veya dakikalık kotası doldu. Kayıtlarınız korundu; kota yenilendiğinde devam edebilirsiniz.");
+    }
+    if (response.status === 403) {
+      throw new GooglePlacesError(403, "Google Places erişimi reddedildi. API anahtarı, Places API (New) ve faturalandırma ayarlarını kontrol edin.");
+    }
+    if (response.status === 400) {
+      throw new GooglePlacesError(400, "Google Places arama isteğini kabul etmedi. Filtrelerinizi değiştirip yeniden deneyin.");
+    }
+    throw new GooglePlacesError(response.status, `Google Places hizmetine şu anda ulaşılamıyor (${response.status}).`);
   }
   return response;
 }
@@ -93,5 +108,31 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
 }
 
 export async function getVisiblePlaceDetails(placeIds: string[]) {
-  return Promise.all(placeIds.map((placeId) => getPlaceDetails(placeId)));
+  const settled = await Promise.allSettled(placeIds.map((placeId) => getPlaceDetails(placeId)));
+  let failedCount = 0;
+  let quotaLimited = false;
+  const places = settled.map((result, index) => {
+    if (result.status === "fulfilled") return result.value;
+    failedCount += 1;
+    if (result.reason instanceof GooglePlacesError && result.reason.status === 429) quotaLimited = true;
+    return unavailablePlace(placeIds[index]);
+  });
+  return { places, failedCount, quotaLimited };
+}
+
+function unavailablePlace(placeId: string): PlaceDetails {
+  return {
+    placeId,
+    name: "İşletme detayı geçici olarak alınamadı",
+    address: "Google kotası veya bağlantısı yenilendiğinde tekrar gösterilecek.",
+    province: "",
+    phone: null,
+    internationalPhone: null,
+    websiteUri: null,
+    googleMapsUri: `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(placeId)}`,
+    businessStatus: "UNKNOWN",
+    primaryType: "İşletme",
+    rating: null,
+    userRatingCount: 0,
+  };
 }

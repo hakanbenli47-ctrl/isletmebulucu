@@ -27,8 +27,15 @@ export async function GET() {
     ]);
     const webTemplate = templates?.find((item) => item.lead_type === "website")?.message;
     const accountingTemplate = templates?.find((item) => item.lead_type === "accounting")?.message;
-    return Response.json({ settings: { resultsPerSearch: settings?.results_per_search ?? 50, dailyContactGoal: settings?.daily_contact_goal ?? 25, websiteSectors: settings?.website_sectors?.length ? settings.website_sectors : [...WEBSITE_SECTORS], accountingSectors: settings?.accounting_sectors?.length ? settings.accounting_sectors : [...ACCOUNTING_SECTORS], websiteMessage: webTemplate ?? DEFAULT_WEBSITE_MESSAGE, accountingMessage: accountingTemplate ?? DEFAULT_ACCOUNTING_MESSAGE }, defaults: DEFAULT_SETTINGS });
+    return Response.json({ settings: { resultsPerSearch: settings?.results_per_search ?? DEFAULT_SETTINGS.resultsPerSearch, dailyContactGoal: settings?.daily_contact_goal ?? DEFAULT_SETTINGS.dailyContactGoal, websiteSectors: sanitizeSectors(settings?.website_sectors, WEBSITE_SECTORS), accountingSectors: sanitizeSectors(settings?.accounting_sectors, ACCOUNTING_SECTORS), websiteMessage: webTemplate ?? DEFAULT_WEBSITE_MESSAGE, accountingMessage: accountingTemplate ?? DEFAULT_ACCOUNTING_MESSAGE }, defaults: DEFAULT_SETTINGS });
   } catch (error) { return apiError(error); }
+}
+
+function sanitizeSectors(value: unknown, allowed: readonly string[]) {
+  if (!Array.isArray(value)) return [...allowed];
+  if (value.some((item) => typeof item === "string" && !allowed.includes(item))) return [...allowed];
+  const clean = value.filter((item): item is string => typeof item === "string" && allowed.includes(item));
+  return clean.length ? clean : [...allowed];
 }
 
 export async function PUT(request: Request) {

@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         (!params.leadType || record.lead_type === params.leadType) &&
         (!since || Boolean(record.contacted_at && record.contacted_at >= since)),
       );
-      return Response.json({ leads: filtered.slice(from, from + params.pageSize), total: filtered.length, stats: mockStats() });
+      return Response.json({ leads: filtered.slice(from, from + params.pageSize), total: filtered.length, stats: mockStats(), warning: null });
     }
 
     const supabase = await createSupabaseServerClient();
@@ -47,10 +47,11 @@ export async function GET(request: Request) {
     if (since) query = query.gte("contacted_at", since);
     const { data, count, error } = await query;
     if (error) throw error;
-    const [details, stats] = await Promise.all([
+    const [detailBatch, stats] = await Promise.all([
       getVisiblePlaceDetails((data ?? []).map((record) => record.place_id)),
       realStats(user.id),
     ]);
+    const details = detailBatch.places;
     const detailsById = new Map(details.map((place) => [place.placeId, place]));
     let leads = (data ?? []).map((record) => {
       const detail = detailsById.get(record.place_id);
@@ -63,7 +64,12 @@ export async function GET(request: Request) {
       );
       leads = leads.sort((a, b) => (detailOrder.get(a.place_id) ?? 999) - (detailOrder.get(b.place_id) ?? 999));
     }
-    return Response.json({ leads, total: count ?? 0, stats });
+    const warning = detailBatch.failedCount
+      ? detailBatch.quotaLimited
+        ? `${detailBatch.failedCount} işletmenin detayı Google kotası nedeniyle alınamadı. Kayıtlarınız kaybolmadı; kota yenilendiğinde sayfayı tekrar açın.`
+        : `${detailBatch.failedCount} işletmenin detayı geçici olarak alınamadı.`
+      : null;
+    return Response.json({ leads, total: count ?? 0, stats, warning });
   } catch (error) {
     return apiError(error);
   }

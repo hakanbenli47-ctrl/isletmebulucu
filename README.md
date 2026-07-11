@@ -113,3 +113,8 @@ Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıfland
 - Şehirler alfabetik değil, ticari hareketlilik önceliğiyle taranır.
 - Web sitesi adaylarında en az 4,0 puan ve 5–250 yorum; ön muhasebe adaylarında en az 3,8 puan ve 8–500 yorum aranır.
 - Ön muhasebede stok/cari hareketi yoğun sabit sektörler, web sitesi adaylarında güçlü yerel görünürlük sinyali bulunan işletmeler önce gösterilir.
+- Aday ekranlarında şehir ve meslek/sektör filtresiyle hedefli arama yapılabilir.
+- `Dengeli`, `Seçici` ve `Geniş` kalite profilleriyle aday havuzunun sıkılığı değiştirilebilir; kurallar sabittir ve yapay zekâ kullanılmaz.
+- Ön muhasebe sektörleri toptan satış, dağıtım, tedarik, üretim ve stok hareketi yüksek işletmelere odaklanır.
+- Masaüstünde WhatsApp uygulaması (sekmesiz) veya WhatsApp Web (tek çalışma sekmesi) seçilebilir.
+- Google kota veya geçici detay hatasında liste tamamen çökmez; Place ID kayıtları korunur ve erişilemeyen detaylar açıkça belirtilir.

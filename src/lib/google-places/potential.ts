@@ -1,23 +1,30 @@
-import type { LeadType, PlaceDetails } from "@/types";
+import type { LeadQuality, LeadType, PlaceDetails } from "@/types";
 
 const ACCOUNTING_SECTOR_PRIORITY = [
+  "Gıda toptancısı",
+  "İçecek toptancısı",
+  "Temizlik malzemeleri toptancısı",
+  "Ambalaj malzemeleri toptancısı",
+  "Oto yedek parça toptancısı",
+  "Hırdavat toptancısı",
+  "Yapı malzemeleri toptancısı",
+  "Elektrik malzemeleri toptancısı",
+  "Tekstil toptancısı",
+  "Kırtasiye toptancısı",
+  "Medikal malzeme tedarikçisi",
+  "Endüstriyel malzeme tedarikçisi",
+  "Tarım ürünleri toptancısı",
   "Toptancı",
   "Dağıtım firması",
-  "Oto yedek parça",
-  "Hırdavat",
-  "Yapı malzemeleri",
-  "Elektrik malzemeleri",
-  "Mobilya imalatı",
-  "Alüminyum doğrama",
-  "Oto servis",
-  "Lastikçi",
-  "Marangoz",
+  "Mobilya üreticisi",
+  "Plastik ürün üreticisi",
+  "Yem bayisi",
 ] as const;
 
 const ACCOUNTING_PRIMARY_TYPE_PRIORITY = [
   "auto_parts_store", "hardware_store", "building_materials_store", "wholesaler",
-  "distribution_service", "furniture_maker", "manufacturer", "auto_repair_shop",
-  "car_repair", "tire_shop",
+  "distribution_service", "furniture_maker", "manufacturer", "warehouse_store",
+  "medical_supply_store", "packaging_supply_store",
 ];
 
 export interface PotentialAssessment {
@@ -26,12 +33,16 @@ export interface PotentialAssessment {
   reason: string;
 }
 
-export function assessPotential(place: PlaceDetails, leadType: LeadType): PotentialAssessment {
+export function assessPotential(place: PlaceDetails, leadType: LeadType, quality: LeadQuality = "recommended"): PotentialAssessment {
   const rating = place.rating ?? 0;
   const reviews = place.userRatingCount;
 
   if (leadType === "website") {
-    const eligible = rating >= 4 && reviews >= 5 && reviews <= 250;
+    const eligible = quality === "selective"
+      ? rating >= 4.4 && reviews >= 10 && reviews <= 150
+      : quality === "broad"
+        ? rating >= 3.8 && reviews >= 2 && reviews <= 500
+        : rating >= 4 && reviews >= 5 && reviews <= 250;
     const high = eligible && rating >= 4.5 && reviews >= 10 && reviews <= 120;
     return {
       eligible,
@@ -45,8 +56,13 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType): Potent
   const prioritySector = ACCOUNTING_SECTOR_PRIORITY.includes(
     (place.sector ?? "") as (typeof ACCOUNTING_SECTOR_PRIORITY)[number],
   ) || ACCOUNTING_PRIMARY_TYPE_PRIORITY.includes(place.primaryType);
-  const eligible = rating >= 3.8 && reviews >= 8 && reviews <= 500;
-  const high = eligible && rating >= 4.2 && reviews >= 10 && reviews <= 250 && prioritySector;
+  // B2B toptancılar son kullanıcı işletmeleri kadar yorum toplamaz; sektör uyumu daha güçlü sinyaldir.
+  const eligible = quality === "selective"
+    ? rating >= 4 && reviews >= 5 && reviews <= 200
+    : quality === "broad"
+      ? rating >= 3 && reviews >= 1 && reviews <= 500
+      : rating >= 3.5 && reviews >= 2 && reviews <= 300;
+  const high = eligible && rating >= 4 && reviews >= 3 && reviews <= 120 && prioritySector;
   return {
     eligible,
     level: high ? "high" : "standard",
@@ -57,6 +73,9 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType): Potent
 }
 
 export function withPotential(place: PlaceDetails, leadType: LeadType): PlaceDetails {
+  if (place.businessStatus === "UNKNOWN") {
+    return { ...place, potentialLevel: "standard", potentialReason: undefined };
+  }
   const assessment = assessPotential(place, leadType);
   return { ...place, potentialLevel: assessment.level, potentialReason: assessment.reason };
 }

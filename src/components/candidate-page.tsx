@@ -1,28 +1,38 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Undo2 } from "lucide-react";
+import { BriefcaseBusiness, MapPin, RotateCcw, Search, Undo2 } from "lucide-react";
 import { useLeads } from "@/hooks/use-leads";
 import LeadList from "@/components/lead-list";
-import type { AppSettings, LeadRecord, LeadStatus, LeadType } from "@/types";
+import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
+import type { AppSettings, LeadQuality, LeadRecord, LeadStatus, LeadType } from "@/types";
 
 export default function CandidatePage({ leadType, title, description }: { leadType: LeadType; title: string; description: string }) {
-  const { leads, setLeads, page, setPage, total, setTotal, loading, error, setError } = useLeads(leadType);
+  const { leads, setLeads, page, setPage, total, setTotal, loading, error, setError, warning } = useLeads(leadType);
   const [searching, setSearching] = useState(false);
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
+  const [availableSectors, setAvailableSectors] = useState<string[]>([]);
+  const [resultsPerSearch, setResultsPerSearch] = useState(10);
+  const [provinceFilter, setProvinceFilter] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("");
+  const [qualityFilter, setQualityFilter] = useState<LeadQuality>("recommended");
   const [undoLead, setUndoLead] = useState<LeadRecord | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then((data: { settings: AppSettings }) => setMessage(leadType === "website" ? data.settings.websiteMessage : data.settings.accountingMessage)).catch(() => setMessage("Merhaba, iyi çalışmalar."));
+    fetch("/api/settings").then((r) => r.json()).then((data: { settings: AppSettings }) => {
+      setMessage(leadType === "website" ? data.settings.websiteMessage : data.settings.accountingMessage);
+      setAvailableSectors(leadType === "website" ? data.settings.websiteSectors : data.settings.accountingSectors);
+      setResultsPerSearch(data.settings.resultsPerSearch);
+    }).catch(() => setMessage("Merhaba, iyi çalışmalar."));
     return () => { if (undoTimer.current) clearTimeout(undoTimer.current); };
   }, [leadType]);
 
   async function search() {
     setSearching(true); setError(""); setNotice("");
     try {
-      const response = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadType }) });
+      const response = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadType, province: provinceFilter || undefined, sector: sectorFilter || undefined, quality: qualityFilter }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setLeads((current) => [...data.leads, ...current].slice(0, 10));
@@ -68,8 +78,16 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">Aday havuzu</p><h1>{title}</h1><p>{description}</p></div><button onClick={search} disabled={searching} className="primary-button search-button"><Search size={19} />{searching ? "İşletmeler aranıyor…" : "50 Yeni İşletme Bul"}</button></div>
+      <div className="page-heading"><div><p className="eyebrow">Aday havuzu</p><h1>{title}</h1><p>{description}</p></div><button onClick={search} disabled={searching} className="primary-button search-button"><Search size={19} />{searching ? "İşletmeler aranıyor…" : `${resultsPerSearch} Yeni İşletme Bul`}</button></div>
+      <div className="search-filters" aria-label="Arama filtreleri">
+        <label><span><MapPin size={15} />Şehir</span><select value={provinceFilter} onChange={(event) => setProvinceFilter(event.target.value)}><option value="">Tüm şehirler · öncelik sırası</option>{TURKIYE_ILLERI.map((province) => <option key={province} value={province}>{province}</option>)}</select></label>
+        <label><span><BriefcaseBusiness size={15} />Meslek / sektör</span><select value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}><option value="">Tüm aktif meslekler</option>{availableSectors.map((sector) => <option key={sector} value={sector}>{sector}</option>)}</select></label>
+        <label><span><Search size={15} />Aday kalitesi</span><select value={qualityFilter} onChange={(event) => setQualityFilter(event.target.value as LeadQuality)}><option value="recommended">Dengeli · önerilen</option><option value="selective">Seçici · güçlü profil</option><option value="broad">Geniş · daha çok aday</option></select></label>
+        {(provinceFilter || sectorFilter || qualityFilter !== "recommended") && <button className="clear-filters" onClick={() => { setProvinceFilter(""); setSectorFilter(""); setQualityFilter("recommended"); }}><RotateCcw size={14} />Filtreleri temizle</button>}
+        <p>{provinceFilter && sectorFilter ? "Seçilen şehir ve meslek için hedefli arama yapılır." : qualityFilter === "selective" ? "Daha yüksek puan ve yorum sinyali bulunan işletmeler seçilir." : qualityFilter === "broad" ? "Daha az yorumlu işletmeler de değerlendirilir; sonuç sayısı artabilir." : "Boş bırakılan alanlarda kayıtlı öncelik sırası ve dengeli kalite kuralları kullanılır."}</p>
+      </div>
       {notice && <div className="notice success" role="status">{notice}</div>}
+      {warning && <div className="notice warning" role="status">{warning}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <LeadList leads={leads} leadType={leadType} loading={loading} whatsappMessage={message} onContact={contact} onStatus={changeStatus} />
       <Pagination page={page} total={total} onPage={setPage} />

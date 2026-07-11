@@ -32,8 +32,19 @@ describe("potansiyel aday kuralları", () => {
   });
 
   it("ön muhasebede stok ve cari yoğun sektörü önceliklendirir", () => {
-    const result = assessPotential(place({ rating: 4.5, userRatingCount: 80, sector: "Yapı malzemeleri" }), "accounting");
+    const result = assessPotential(place({ rating: 4.5, userRatingCount: 80, sector: "Yapı malzemeleri toptancısı" }), "accounting");
     expect(result).toMatchObject({ eligible: true, level: "high" });
+  });
+
+  it("az yorumlu B2B toptancıyı dengeli modda kaçırmaz", () => {
+    const result = assessPotential(place({ rating: 4.1, userRatingCount: 3, sector: "Gıda toptancısı" }), "accounting");
+    expect(result).toMatchObject({ eligible: true, level: "high" });
+  });
+
+  it("seçici ve geniş kalite eşiklerini ayrı uygular", () => {
+    const candidate = place({ rating: 3.9, userRatingCount: 3 });
+    expect(assessPotential(candidate, "website", "selective").eligible).toBe(false);
+    expect(assessPotential(candidate, "website", "broad").eligible).toBe(true);
   });
 
   it("öncelikli adayları ve ideal yorum aralığını önce sıralar", () => {

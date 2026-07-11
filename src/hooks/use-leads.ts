@@ -9,6 +9,7 @@ export function useLeads(leadType: LeadType) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -16,7 +17,7 @@ export function useLeads(leadType: LeadType) {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
-        setLeads(data.leads); setTotal(data.total); setError("");
+        setLeads(data.leads); setTotal(data.total); setError(""); setWarning(data.warning ?? "");
       })
       .catch((caught) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -25,5 +26,5 @@ export function useLeads(leadType: LeadType) {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [leadType, page]);
-  return { leads, setLeads, page, setPage, total, setTotal, loading, error, setError };
+  return { leads, setLeads, page, setPage, total, setTotal, loading, error, setError, warning };
 }

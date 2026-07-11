@@ -3,30 +3,28 @@ import type { AppSettings } from "@/types";
 
 export const DEFAULT_WEBSITE_MESSAGE = `Merhaba, iyi çalışmalar.
 
-Sitemix olarak işletmelere özel, mobil uyumlu ve müşterilerin WhatsApp, telefon ve konum üzerinden kolayca iletişime geçebildiği profesyonel web siteleri hazırlıyoruz.
+Sitemix olarak işletmenizin dijitalde daha güvenilir ve profesyonel görünmesi için tasarımından yayına alınmasına kadar tüm süreci kapsayan anahtar teslim web siteleri hazırlıyoruz.
 
-İşletmeniz için ücretsiz bir ön çalışma hazırlayarak sunmak isteriz. İncelemek isterseniz örnek çalışmayı paylaşabiliriz.
+Hazırladığımız mobil uyumlu sitelerde müşterileriniz size WhatsApp, telefon ve konum üzerinden kolayca ulaşabilir; hizmetlerinizi ve çalışmalarınızı tek yerde inceleyebilir.
 
-İlgilenmiyorsanız belirtmeniz yeterlidir; tekrar iletişim kurulmayacaktır.
+İşletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp sunabiliriz. Uygun görürseniz örnek çalışmayı paylaşalım.
 
 Sitemix
 www.sitemix.com.tr`;
 
 export const DEFAULT_ACCOUNTING_MESSAGE = `Merhaba, iyi çalışmalar.
 
-Sitemix Ön Muhasebe; cari, stok, kasa, borç-alacak ve işletme hareketlerinin tek panel üzerinden kolayca takip edilmesi için geliştirilmiştir.
+Sitemix Ön Muhasebe; toptan satış, stok ve cari hareketi bulunan işletmelerin kasa, borç-alacak ve ürün takibini tek panelden yönetebilmesi için geliştirilmiştir.
 
-Hızlı kurulumu, PDF çıktıları, WhatsApp bilgilendirme özelliği ve anlaşılır kullanım yapısıyla işletmenizin günlük takibini kolaylaştırır.
+Hızlı kurulum, anlaşılır kullanım, PDF çıktıları ve WhatsApp bilgilendirme özellikleriyle günlük işlemleri düzenli ve pratik hale getirir.
 
-Sistemi 7 gün ücretsiz deneyebilirsiniz. Tanıtım ve kayıt bağlantısını paylaşmamızı ister misiniz?
-
-İlgilenmiyorsanız belirtmeniz yeterlidir; tekrar iletişim kurulmayacaktır.
+Sistemi 7 gün ücretsiz deneyebilirsiniz. Kısa tanıtım ve deneme bağlantısını paylaşalım mı?
 
 Sitemix`;
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  resultsPerSearch: 50,
-  dailyContactGoal: 25,
+  resultsPerSearch: 10,
+  dailyContactGoal: 20,
   websiteSectors: [...WEBSITE_SECTORS],
   accountingSectors: [...ACCOUNTING_SECTORS],
   websiteMessage: DEFAULT_WEBSITE_MESSAGE,

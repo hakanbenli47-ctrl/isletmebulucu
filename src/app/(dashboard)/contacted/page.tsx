@@ -13,6 +13,7 @@ export default function ContactedPage() {
   const [stats, setStats] = useState<Stats>({ today: 0, week: 0, total: 0, customers: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -20,7 +21,7 @@ export default function ContactedPage() {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
-        setLeads(data.leads); setStats(data.stats); setError("");
+        setLeads(data.leads); setStats(data.stats); setError(""); setWarning(data.warning ?? "");
       })
       .catch((caught) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -50,6 +51,7 @@ export default function ContactedPage() {
         {([['today', 'Bugün'], ['week', 'Son 7 gün'], ['all', 'Tümü']] as const).map(([value, label]) => <button key={value} role="tab" aria-selected={period === value} className={period === value ? "active" : ""} onClick={() => setPeriod(value)}>{label}</button>)}
       </div>
       {error && <div className="notice error" role="alert">{error}</div>}
+      {warning && <div className="notice warning" role="status">{warning}</div>}
       <LeadList leads={leads} loading={loading} contacted onStatus={changeStatus} />
     </section>
   );

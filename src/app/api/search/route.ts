@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-response";
 import { requireApiUser } from "@/lib/auth";
 import { isMockMode } from "@/lib/config";
 import { DEFAULT_SETTINGS } from "@/data/defaults";
+import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "@/data/sectors";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
 import { searchPlaces } from "@/lib/google-places/client";
 import { filterNewPlaceIds } from "@/lib/google-places/dedupe";
@@ -13,7 +14,12 @@ import { mockSearch, mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadRecord, PlaceDetails } from "@/types";
 
-const inputSchema = z.object({ leadType: z.enum(["website", "accounting"]) });
+const inputSchema = z.object({
+  leadType: z.enum(["website", "accounting"]),
+  province: z.enum(TURKIYE_ILLERI).optional(),
+  sector: z.string().trim().min(2).max(100).optional(),
+  quality: z.enum(["recommended", "selective", "broad"]).default("recommended"),
+});
 
 async function allExistingPlaceIds(userId: string) {
   const supabase = await createSupabaseServerClient();
@@ -30,7 +36,7 @@ async function allExistingPlaceIds(userId: string) {
 export async function POST(request: Request) {
   try {
     const user = await requireApiUser();
-    const { leadType } = inputSchema.parse(await request.json());
+    const { leadType, province: requestedProvince, sector: requestedSector, quality } = inputSchema.parse(await request.json());
 
     if (isMockMode()) {
       const target = mockStore.settings.resultsPerSearch;
@@ -46,9 +52,13 @@ export async function POST(request: Request) {
     ]);
 
     const target = Math.min(50, Math.max(1, settingsRow?.results_per_search ?? DEFAULT_SETTINGS.resultsPerSearch));
-    const sectors = (leadType === "website" ? settingsRow?.website_sectors : settingsRow?.accounting_sectors) as string[] | null;
-    const activeSectors = sectors?.length ? sectors : leadType === "website" ? DEFAULT_SETTINGS.websiteSectors : DEFAULT_SETTINGS.accountingSectors;
+    const allowedSectors = leadType === "website" ? WEBSITE_SECTORS : ACCOUNTING_SECTORS;
+    const storedSectors = (leadType === "website" ? settingsRow?.website_sectors : settingsRow?.accounting_sectors) as unknown;
+    const activeSectors = sanitizeSectors(storedSectors, allowedSectors);
     if (!activeSectors.length) return Response.json({ error: "Bu aday türü için en az bir aktif sektör seçin." }, { status: 400 });
+    if (requestedSector && !activeSectors.includes(requestedSector)) {
+      return Response.json({ error: "Seçilen meslek aktif sektörleriniz arasında değil." }, { status: 400 });
+    }
 
     let position = { provinceIndex: stateRow?.province_index ?? 0, sectorIndex: stateRow?.sector_index ?? 0 };
     position.provinceIndex %= TURKIYE_ILLERI.length;
@@ -57,27 +67,40 @@ export async function POST(request: Request) {
     const seen = new Set(existingIds);
     const found: Array<{ details: PlaceDetails; db: Omit<LeadRecord, "details"> }> = [];
     let apiCalls = 0;
+    let filteredProvinceIndex = 0;
+    let filteredSectorIndex = 0;
+    const filteredSearch = Boolean(requestedProvince || requestedSector);
 
     while (apiCalls < maxCalls && found.length < target) {
-      const province = TURKIYE_ILLERI[position.provinceIndex];
-      const sector = activeSectors[position.sectorIndex];
+      const province = requestedProvince ?? (requestedSector ? TURKIYE_ILLERI[filteredProvinceIndex] : TURKIYE_ILLERI[position.provinceIndex]);
+      const sector = requestedSector ?? (requestedProvince ? activeSectors[filteredSectorIndex] : activeSectors[position.sectorIndex]);
       const results = await searchPlaces(`${sector} ${province}`, sector, province);
       apiCalls += 1;
-      position = advanceSearchPosition(position, TURKIYE_ILLERI.length, activeSectors.length);
+
+      if (requestedProvince && requestedSector) {
+        filteredProvinceIndex = TURKIYE_ILLERI.length;
+        filteredSectorIndex = activeSectors.length;
+      } else if (requestedProvince) {
+        filteredSectorIndex += 1;
+      } else if (requestedSector) {
+        filteredProvinceIndex += 1;
+      } else {
+        position = advanceSearchPosition(position, TURKIYE_ILLERI.length, activeSectors.length);
+      }
 
       const eligible = filterNewPlaceIds(
         orderPotentialPlaces(results.filter((place) =>
           place.businessStatus === "OPERATIONAL" &&
           Boolean(place.phone || place.internationalPhone) &&
           (leadType === "accounting" || !isIndependentWebsite(place.websiteUri)) &&
-          assessPotential(place, leadType).eligible,
+          assessPotential(place, leadType, quality).eligible,
         ), leadType),
         seen,
       ).slice(0, target - found.length);
 
       if (eligible.length) {
         const rows = eligible.map((place) => ({ user_id: user.id, place_id: place.placeId, lead_type: leadType, status: "new" }));
-        const { data: inserted, error } = await supabase.from("lead_records").insert(rows).select("id,place_id,lead_type,status,contacted_at,created_at");
+        const { data: inserted, error } = await supabase.from("lead_records").upsert(rows, { onConflict: "place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,created_at");
         if (error) throw error;
         const byId = new Map(eligible.map((place) => [place.placeId, place]));
         for (const db of inserted ?? []) {
@@ -86,12 +109,23 @@ export async function POST(request: Request) {
         }
         eligible.forEach((place) => seen.add(place.placeId));
       }
+
+      if (
+        (requestedProvince && requestedSector) ||
+        (requestedProvince && filteredSectorIndex >= activeSectors.length) ||
+        (requestedSector && filteredProvinceIndex >= TURKIYE_ILLERI.length)
+      ) break;
     }
 
-    await Promise.all([
-      supabase.from("search_states").upsert({ user_id: user.id, lead_type: leadType, province_index: position.provinceIndex, sector_index: position.sectorIndex }, { onConflict: "user_id,lead_type" }),
+    const writes = [
       supabase.from("search_runs").insert({ user_id: user.id, lead_type: leadType, requested_count: target, returned_count: found.length, api_call_count: apiCalls }),
-    ]);
+    ];
+    if (!filteredSearch) {
+      writes.push(supabase.from("search_states").upsert({ user_id: user.id, lead_type: leadType, province_index: position.provinceIndex, sector_index: position.sectorIndex }, { onConflict: "user_id,lead_type" }));
+    }
+    const writeResults = await Promise.all(writes);
+    const writeError = writeResults.find((result) => result.error)?.error;
+    if (writeError) throw writeError;
 
     const detailOrder = new Map(
       orderPotentialPlaces(found.map((item) => item.details), leadType)
@@ -105,4 +139,11 @@ export async function POST(request: Request) {
   } catch (error) {
     return apiError(error);
   }
+}
+
+function sanitizeSectors(value: unknown, allowed: readonly string[]) {
+  if (!Array.isArray(value)) return [...allowed];
+  if (value.some((item) => typeof item === "string" && !allowed.includes(item))) return [...allowed];
+  const clean = value.filter((item): item is string => typeof item === "string" && allowed.includes(item));
+  return clean.length ? clean : [...allowed];
 }

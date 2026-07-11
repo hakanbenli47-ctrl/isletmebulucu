@@ -1,4 +1,5 @@
 export type LeadType = "website" | "accounting";
+export type LeadQuality = "recommended" | "selective" | "broad";
 
 export type LeadStatus =
   | "new"

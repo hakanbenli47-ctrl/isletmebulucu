@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWhatsAppUrl, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
+import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
 
 describe("normalizeTurkishPhone", () => {
   it.each([
@@ -20,6 +20,16 @@ describe("buildWhatsAppUrl", () => {
   it("telefonu ve mesajı güvenli bağlantıya dönüştürür", () => {
     expect(buildWhatsAppUrl("0532 123 45 67", "Merhaba & iyi çalışmalar"))
       .toBe("https://wa.me/905321234567?text=Merhaba%20%26%20iyi%20%C3%A7al%C4%B1%C5%9Fmalar");
+  });
+
+  it("masaüstü uygulama bağlantısını oluşturur", () => {
+    expect(buildWhatsAppDesktopUrl("0532 123 45 67", "Merhaba"))
+      .toBe("whatsapp://send?phone=905321234567&text=Merhaba");
+  });
+
+  it("WhatsApp Web bağlantısını oluşturur", () => {
+    expect(buildWhatsAppWebUrl("0532 123 45 67", "İyi çalışmalar"))
+      .toBe("https://web.whatsapp.com/send?phone=905321234567&text=%C4%B0yi%20%C3%A7al%C4%B1%C5%9Fmalar");
   });
 });
 
