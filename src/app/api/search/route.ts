@@ -10,6 +10,7 @@ import { filterNewPlaceIds } from "@/lib/google-places/dedupe";
 import { advanceSearchPosition } from "@/lib/google-places/progress";
 import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "@/lib/google-places/website";
 import { assessPotential, orderPotentialPlaces } from "@/lib/google-places/potential";
+import { assessSectorRelevance } from "@/lib/google-places/relevance";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
           Boolean(place.phone || place.internationalPhone) &&
           (leadType === "accounting" || !isIndependentWebsite(place.websiteUri)) &&
           matchesPresence(place.websiteUri, leadType, presence) &&
+          assessSectorRelevance(place, sector, leadType).eligible &&
           assessPotential(place, leadType, quality).eligible,
         ), leadType),
         seen,

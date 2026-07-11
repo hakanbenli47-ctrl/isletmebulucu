@@ -153,3 +153,5 @@ Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıfland
 - Şehir/sektör performansı sadece sizin satış sonuçlarınızdan hesaplanır; yapay zekâ kullanılmaz.
 - Web adayları `Instagram var · site yok` kanalına göre aranabilir; Instagram bağlantısı ve uygun mesaj otomatik seçilir.
 - Ön muhasebe ilk temas ve takip mesajları kayıt bağlantısını içerir: `https://www.sitemix.com.tr/on-muhasebe/kayit`.
+- Aday listelerinde klasik sayfalama yoktur; aşağı kaydırıldıkça diğer kayıtlar otomatik yüklenir ve filtreler mevcut listeye anında uygulanır.
+- Arama sonuçları sektör adı ve Google işletme türüyle doğrulanır; alakasız sektör sonuçları aday havuzuna eklenmez.
