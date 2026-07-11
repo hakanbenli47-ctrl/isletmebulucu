@@ -1,0 +1,89 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Search, Undo2 } from "lucide-react";
+import { useLeads } from "@/hooks/use-leads";
+import LeadList from "@/components/lead-list";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import type { AppSettings, LeadRecord, LeadStatus, LeadType } from "@/types";
+
+export default function CandidatePage({ leadType, title, description }: { leadType: LeadType; title: string; description: string }) {
+  const { leads, setLeads, page, setPage, total, setTotal, loading, error, setError } = useLeads(leadType);
+  const [searching, setSearching] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [message, setMessage] = useState("");
+  const [undoLead, setUndoLead] = useState<LeadRecord | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings").then((r) => r.json()).then((data: { settings: AppSettings }) => setMessage(leadType === "website" ? data.settings.websiteMessage : data.settings.accountingMessage)).catch(() => setMessage("Merhaba, iyi çalışmalar."));
+    return () => { if (undoTimer.current) clearTimeout(undoTimer.current); };
+  }, [leadType]);
+
+  async function search() {
+    setSearching(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadType }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setLeads((current) => [...data.leads, ...current].slice(0, 10));
+      setTotal((current) => current + data.found);
+      setPage(1); setNotice(data.message);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Tarama tamamlanamadı."); }
+    finally { setSearching(false); }
+  }
+
+  async function changeStatus(lead: LeadRecord, status: LeadStatus) {
+    setLeads((current) => current.filter((item) => item.place_id !== lead.place_id));
+    setTotal((current) => Math.max(0, current - 1));
+    if (status === "contacted") {
+      setUndoLead(lead);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndoLead(null), 10_000);
+    }
+    try {
+      const response = await fetch(`/api/leads/${encodeURIComponent(lead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+    } catch (caught) {
+      setLeads((current) => current.some((item) => item.place_id === lead.place_id) ? current : [lead, ...current]);
+      setTotal((current) => current + 1);
+      if (status === "contacted") setUndoLead(null);
+      throw caught;
+    }
+  }
+
+  async function contact(lead: LeadRecord) {
+    const url = buildWhatsAppUrl(lead.details.internationalPhone ?? lead.details.phone ?? "", message);
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+    try { await changeStatus(lead, "contacted"); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Durum güncellenemedi."); }
+  }
+
+  async function undo() {
+    if (!undoLead) return;
+    try {
+      const response = await fetch(`/api/leads/${encodeURIComponent(undoLead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "new" }) });
+      if (!response.ok) throw new Error((await response.json()).error);
+      setLeads((current) => [undoLead, ...current]); setTotal((current) => current + 1); setUndoLead(null);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "İşlem geri alınamadı."); }
+  }
+
+  return (
+    <section>
+      <div className="page-heading"><div><p className="eyebrow">Aday havuzu</p><h1>{title}</h1><p>{description}</p></div><button onClick={search} disabled={searching} className="primary-button search-button"><Search size={19} />{searching ? "İşletmeler aranıyor…" : "50 Yeni İşletme Bul"}</button></div>
+      {notice && <div className="notice success" role="status">{notice}</div>}
+      {error && <div className="notice error" role="alert">{error}</div>}
+      <LeadList leads={leads} leadType={leadType} loading={loading} onContact={contact} onStatus={changeStatus} />
+      <Pagination page={page} total={total} onPage={setPage} />
+      {undoLead && <div className="undo-toast"><span><strong>{undoLead.details.name}</strong> mesaj gönderilenlere taşındı.</span><button onClick={undo}><Undo2 size={16} />Geri Al</button><span className="undo-progress" /></div>}
+    </section>
+  );
+}
+
+function Pagination({ page, total, onPage }: { page: number; total: number; onPage: (page: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / 10));
+  if (total <= 10) return null;
+  return <div className="pagination"><button disabled={page === 1} onClick={() => onPage(page - 1)}>Önceki</button><span>{page} / {pages}</span><button disabled={page >= pages} onClick={() => onPage(page + 1)}>Sonraki</button></div>;
+}
