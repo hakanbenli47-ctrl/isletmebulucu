@@ -1,5 +1,6 @@
 import { AuthError } from "@/lib/auth";
 import { GooglePlacesError } from "@/lib/google-places/client";
+import { kullaniciyaUygunSupabaseHatasi } from "@/lib/supabase/errors";
 import { ZodError } from "zod";
 
 export function apiError(error: unknown) {
@@ -11,6 +12,11 @@ export function apiError(error: unknown) {
   }
   if (error instanceof GooglePlacesError) {
     return Response.json({ error: error.message }, { status: error.status });
+  }
+  const supabaseMesaji = kullaniciyaUygunSupabaseHatasi(error);
+  if (supabaseMesaji) {
+    console.error("Supabase API hatası:", error);
+    return Response.json({ error: supabaseMesaji }, { status: 500 });
   }
   const message = error instanceof Error ? error.message : "Beklenmeyen bir hata oluştu.";
   return Response.json({ error: message }, { status: 500 });

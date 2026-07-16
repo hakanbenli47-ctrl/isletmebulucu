@@ -14,6 +14,7 @@ import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { normalizePhoneSearch } from "@/lib/phone-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { supabaseSutunuEksikMi } from "@/lib/supabase/errors";
 import type { LeadRecord, PlaceDetails } from "@/types";
 
 const inputSchema = z.object({
@@ -120,10 +121,23 @@ export async function POST(request: Request) {
           source_province: province,
           source_sector: sector,
         }));
-        const { data: inserted, error } = await supabase.from("lead_records").upsert(rows, { onConflict: "user_id,place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at");
-        if (error) throw error;
+        let insertResult = await supabase.from("lead_records").upsert(rows, { onConflict: "user_id,place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at");
+
+        if (supabaseSutunuEksikMi(insertResult.error, "phone_normalized")) {
+          const eskiSemayaUygunSatirlar = rows.map((row) => ({
+            user_id: row.user_id,
+            place_id: row.place_id,
+            lead_type: row.lead_type,
+            status: row.status,
+            source_province: row.source_province,
+            source_sector: row.source_sector,
+          }));
+          insertResult = await supabase.from("lead_records").upsert(eskiSemayaUygunSatirlar, { onConflict: "user_id,place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at");
+        }
+
+        if (insertResult.error) throw insertResult.error;
         const byId = new Map(eligible.map((place) => [place.placeId, place]));
-        for (const db of inserted ?? []) {
+        for (const db of insertResult.data ?? []) {
           const details = byId.get(db.place_id);
           if (details) found.push({ details, db: db as Omit<LeadRecord, "details"> });
         }

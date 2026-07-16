@@ -8,6 +8,7 @@ import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockStore } from "@/lib/mock-data";
 import { normalizePhoneSearch, phoneMatchesSearch } from "@/lib/phone-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { supabaseSutunuEksikMi } from "@/lib/supabase/errors";
 import type { LeadRecord, LeadStatus, LeadType, PlaceDetails } from "@/types";
 
 const DB_STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "no_reply", "not_approved", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
@@ -77,9 +78,13 @@ export async function GET(request: Request) {
         .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at")
         .eq("user_id", user.id)
         .eq("phone_normalized", searchedPhone);
-      if (indexedError) throw indexedError;
+      const telefonIndeksiEksik = supabaseSutunuEksikMi(
+        indexedError,
+        "phone_normalized",
+      );
+      if (indexedError && !telefonIndeksiEksik) throw indexedError;
 
-      let records = indexedRecords ?? [];
+      let records = telefonIndeksiEksik ? [] : indexedRecords ?? [];
       let matchingPlaces: PlaceDetails[] = [];
       let warning: string | null = null;
 
@@ -113,13 +118,18 @@ export async function GET(request: Request) {
           if (error) throw error;
           records = data ?? [];
 
-          if (records.length) {
+          if (records.length && !telefonIndeksiEksik) {
             const { error: indexError } = await supabase
               .from("lead_records")
               .update({ phone_normalized: searchedPhone })
               .eq("user_id", user.id)
               .in("place_id", records.map((record) => record.place_id));
-            if (indexError) throw indexError;
+            if (
+              indexError &&
+              !supabaseSutunuEksikMi(indexError, "phone_normalized")
+            ) {
+              throw indexError;
+            }
           }
         }
       }

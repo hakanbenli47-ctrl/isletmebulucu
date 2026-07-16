@@ -47,8 +47,15 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
     setSearching(true); setError(""); setNotice("");
     try {
       const response = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadType, province: provinceFilter || undefined, sector: sectorFilter || undefined, quality: qualityFilter, presence: leadType === "website" ? presenceFilter : "all" }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          data?.error || `Arama isteği tamamlanamadı (${response.status}).`,
+        );
+      }
+      if (!data || !Array.isArray(data.leads)) {
+        throw new Error("Arama sunucusu geçerli bir sonuç döndürmedi.");
+      }
       setLeads((current) => mergeNewLeads(data.leads, current));
       setTotal((current) => current + data.found);
       setNotice(data.message);
