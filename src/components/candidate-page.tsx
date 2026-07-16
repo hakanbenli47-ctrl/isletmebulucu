@@ -65,7 +65,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
       undoTimer.current = setTimeout(() => setUndoLead(null), 10_000);
     }
     try {
-      const response = await fetch(`/api/leads/${encodeURIComponent(lead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, recordContact }) });
+      const response = await fetch(`/api/leads/${encodeURIComponent(lead.place_id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, recordContact, phone: lead.details.internationalPhone ?? lead.details.phone ?? undefined }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
     } catch (caught) {

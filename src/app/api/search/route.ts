@@ -12,6 +12,7 @@ import { createQualificationDiagnostics, formatQualificationSummary, qualifySear
 import { includedTypeForSector } from "@/lib/google-places/relevance";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
+import { normalizePhoneSearch } from "@/lib/phone-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadRecord, PlaceDetails } from "@/types";
 
@@ -110,7 +111,15 @@ export async function POST(request: Request) {
       });
 
       if (eligible.length) {
-        const rows = eligible.map((place) => ({ user_id: user.id, place_id: place.placeId, lead_type: leadType, status: "new", source_province: province, source_sector: sector }));
+        const rows = eligible.map((place) => ({
+          user_id: user.id,
+          place_id: place.placeId,
+          phone_normalized: normalizePhoneSearch(place.internationalPhone ?? place.phone),
+          lead_type: leadType,
+          status: "new",
+          source_province: province,
+          source_sector: sector,
+        }));
         const { data: inserted, error } = await supabase.from("lead_records").upsert(rows, { onConflict: "user_id,place_id", ignoreDuplicates: true }).select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at");
         if (error) throw error;
         const byId = new Map(eligible.map((place) => [place.placeId, place]));

@@ -4,8 +4,9 @@ create table public.lead_records (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   place_id text not null,
+  phone_normalized text check (phone_normalized is null or phone_normalized ~ '^90[0-9]{10}$'),
   lead_type text not null check (lead_type in ('website', 'accounting')),
-  status text not null default 'new' check (status in ('new', 'contacted', 'replied', 'interested', 'demo_sent', 'follow_up', 'not_suitable', 'no_whatsapp', 'opted_out', 'customer', 'archived')),
+  status text not null default 'new' check (status in ('new', 'contacted', 'replied', 'interested', 'demo_sent', 'follow_up', 'no_reply', 'not_approved', 'not_suitable', 'no_whatsapp', 'opted_out', 'customer', 'archived')),
   contacted_at timestamptz,
   next_follow_up_at timestamptz,
   contact_count integer not null default 0 check (contact_count between 0 and 20),
@@ -93,6 +94,7 @@ create table public.referral_partners (
 );
 
 create index lead_records_user_status_idx on public.lead_records(user_id, status, lead_type);
+create index lead_records_user_phone_idx on public.lead_records(user_id, phone_normalized) where phone_normalized is not null;
 create index lead_records_contacted_at_idx on public.lead_records(user_id, contacted_at desc);
 create index lead_records_follow_up_idx on public.lead_records(user_id, next_follow_up_at) where next_follow_up_at is not null;
 create index search_runs_user_created_idx on public.search_runs(user_id, created_at desc);

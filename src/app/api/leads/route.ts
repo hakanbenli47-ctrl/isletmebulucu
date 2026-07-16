@@ -2,14 +2,15 @@ import { z } from "zod";
 import { apiError } from "@/lib/api-response";
 import { requireApiUser } from "@/lib/auth";
 import { isMockMode } from "@/lib/config";
-import { getVisiblePlaceDetails } from "@/lib/google-places/client";
+import { getVisiblePlaceDetails, searchPlaces } from "@/lib/google-places/client";
 import { orderPotentialPlaces, withPotential } from "@/lib/google-places/potential";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockStore } from "@/lib/mock-data";
+import { normalizePhoneSearch, phoneMatchesSearch } from "@/lib/phone-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadRecord, LeadStatus, LeadType, PlaceDetails } from "@/types";
 
-const DB_STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
+const DB_STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "no_reply", "not_approved", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
 const PIPELINE_STATUSES: LeadStatus[] = ["contacted", "replied", "interested", "demo_sent", "follow_up"];
 const REPLY_STATUSES: LeadStatus[] = ["replied", "interested", "demo_sent", "customer"];
 const INTERESTED_STATUSES: LeadStatus[] = ["interested", "demo_sent", "customer"];
@@ -20,6 +21,7 @@ const querySchema = z.object({
   period: z.enum(["today", "week", "all"]).default("all"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
+  phone: z.string().trim().max(30).optional(),
 });
 
 function sinceFor(period: "today" | "week" | "all") {
@@ -35,8 +37,30 @@ export async function GET(request: Request) {
     const user = await requireApiUser();
     const params = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const from = (params.page - 1) * params.pageSize;
+    const searchedPhone = params.phone ? normalizePhoneSearch(params.phone) : null;
+
+    if (params.phone && !searchedPhone) {
+      return Response.json(
+        { error: "İşletmeyi bulmak için alan koduyla birlikte geçerli bir Türkiye telefon numarası yazın." },
+        { status: 400 },
+      );
+    }
 
     if (isMockMode()) {
+      if (searchedPhone) {
+        const found = mockStore.records.filter((record) =>
+          phoneMatchesSearch(
+            searchedPhone,
+            record.details.internationalPhone ?? record.details.phone,
+          ),
+        );
+        return Response.json({
+          leads: found,
+          total: found.length,
+          stats: calculateStats(mockStore.records, mockStore.settings.dailyContactGoal),
+          warning: null,
+        });
+      }
       const since = sinceFor(params.period);
       const filtered = mockStore.records
         .filter((record) => matchesStatus(record, params.status))
@@ -46,6 +70,87 @@ export async function GET(request: Request) {
     }
 
     const supabase = await createSupabaseServerClient();
+    if (searchedPhone) {
+      const statsPromise = realStats(user.id);
+      const { data: indexedRecords, error: indexedError } = await supabase
+        .from("lead_records")
+        .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at")
+        .eq("user_id", user.id)
+        .eq("phone_normalized", searchedPhone);
+      if (indexedError) throw indexedError;
+
+      let records = indexedRecords ?? [];
+      let matchingPlaces: PlaceDetails[] = [];
+      let warning: string | null = null;
+
+      if (records.length) {
+        const detailBatch = await getVisiblePlaceDetails(
+          records.map((record) => record.place_id),
+        );
+        matchingPlaces = detailBatch.places.map((place) =>
+          place.internationalPhone || place.phone
+            ? place
+            : { ...place, internationalPhone: `+${searchedPhone}` },
+        );
+        if (detailBatch.failedCount) {
+          warning = "İşletme kaydı bulundu; canlı Google detaylarının bir bölümü geçici olarak alınamadı.";
+        }
+      } else {
+        const places = await searchPlaces(`+${searchedPhone}`, "");
+        matchingPlaces = places.filter((place) =>
+          phoneMatchesSearch(
+            searchedPhone,
+            place.internationalPhone ?? place.phone,
+          ),
+        );
+
+        if (matchingPlaces.length) {
+          const { data, error } = await supabase
+            .from("lead_records")
+            .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at")
+            .eq("user_id", user.id)
+            .in("place_id", matchingPlaces.map((place) => place.placeId));
+          if (error) throw error;
+          records = data ?? [];
+
+          if (records.length) {
+            const { error: indexError } = await supabase
+              .from("lead_records")
+              .update({ phone_normalized: searchedPhone })
+              .eq("user_id", user.id)
+              .in("place_id", records.map((record) => record.place_id));
+            if (indexError) throw indexError;
+          }
+        }
+      }
+
+      const stats = await statsPromise;
+      if (!records.length) {
+        return Response.json({ leads: [], total: 0, stats, warning: null });
+      }
+
+      const enrichedPlaces = await enrichInstagramActivity(matchingPlaces);
+      const detailsById = new Map(enrichedPlaces.map((place) => [place.placeId, place]));
+      const leads = records.map((record) => {
+        const detail =
+          detailsById.get(record.place_id) ??
+          ({
+            ...unavailablePlace(
+              record.place_id,
+              record.source_province,
+              record.source_sector,
+            ),
+            internationalPhone: `+${searchedPhone}`,
+          } satisfies PlaceDetails);
+        return {
+          ...record,
+          details: withPotential(detail, record.lead_type as LeadType),
+        } as LeadRecord;
+      });
+
+      return Response.json({ leads, total: leads.length, stats, warning });
+    }
+
     const orderColumn = params.status === "due" ? "next_follow_up_at" : params.status === "new" ? "created_at" : "contacted_at";
     let query = supabase
       .from("lead_records")

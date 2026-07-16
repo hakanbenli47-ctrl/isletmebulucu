@@ -8,6 +8,8 @@ export type LeadStatus =
   | "interested"
   | "demo_sent"
   | "follow_up"
+  | "no_reply"
+  | "not_approved"
   | "not_suitable"
   | "no_whatsapp"
   | "opted_out"

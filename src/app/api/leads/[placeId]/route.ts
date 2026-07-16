@@ -3,19 +3,21 @@ import { apiError } from "@/lib/api-response";
 import { requireApiUser } from "@/lib/auth";
 import { isMockMode } from "@/lib/config";
 import { mockStore } from "@/lib/mock-data";
+import { normalizePhoneSearch } from "@/lib/phone-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeadStatus } from "@/types";
 
-const STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
+const STATUSES = ["new", "contacted", "replied", "interested", "demo_sent", "follow_up", "no_reply", "not_approved", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"] as const;
 const placeIdSchema = z.string().trim().min(3).max(500);
 const bodySchema = z.object({
   status: z.enum(STATUSES).optional(),
   notes: z.string().trim().max(5000).nullable().optional(),
   nextFollowUpAt: z.string().datetime().nullable().optional(),
   recordContact: z.boolean().default(false),
-}).refine((value) => value.status !== undefined || value.notes !== undefined || value.nextFollowUpAt !== undefined || value.recordContact, "Güncellenecek bir alan gönderin.");
+  phone: z.string().trim().max(30).refine((value) => normalizePhoneSearch(value) !== null, "Geçerli bir Türkiye telefonu gönderin.").optional(),
+}).refine((value) => value.status !== undefined || value.notes !== undefined || value.nextFollowUpAt !== undefined || value.recordContact || value.phone !== undefined, "Güncellenecek bir alan gönderin.");
 
-const CLOSES_FOLLOW_UP: LeadStatus[] = ["not_suitable", "no_whatsapp", "opted_out", "customer", "archived"];
+const CLOSES_FOLLOW_UP: LeadStatus[] = ["no_reply", "not_approved", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"];
 
 export async function PATCH(request: Request, context: RouteContext<"/api/leads/[placeId]">) {
   try {
@@ -73,6 +75,9 @@ export async function PATCH(request: Request, context: RouteContext<"/api/leads/
       next_follow_up_at: nextFollowUpAt,
       notes: input.notes === undefined ? current.notes : input.notes,
       last_activity_at: new Date().toISOString(),
+      ...(input.phone !== undefined
+        ? { phone_normalized: normalizePhoneSearch(input.phone) }
+        : {}),
     };
     const { data, error } = await supabase
       .from("lead_records")
