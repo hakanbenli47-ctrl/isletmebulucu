@@ -22,7 +22,7 @@ interface GooglePlace {
   businessStatus?: string;
   primaryType?: string;
   types?: string[];
-  googleMapsTypeLabel?: string;
+  googleMapsTypeLabel?: { text?: string; languageCode?: string } | string;
   rating?: number;
   userRatingCount?: number;
 }
@@ -59,8 +59,8 @@ function mapPlace(place: GooglePlace, sector?: string): PlaceDetails | null {
     googleMapsUri: place.googleMapsUri ?? `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(place.id)}`,
     businessStatus: place.businessStatus ?? "UNKNOWN",
     primaryType: place.primaryType ?? "İşletme",
-    types: place.types ?? [],
-    typeLabel: place.googleMapsTypeLabel,
+    types: Array.isArray(place.types) ? place.types.filter((type): type is string => typeof type === "string") : [],
+    typeLabel: typeof place.googleMapsTypeLabel === "string" ? place.googleMapsTypeLabel : place.googleMapsTypeLabel?.text,
     countryCode,
     rating: place.rating ?? null,
     userRatingCount: place.userRatingCount ?? 0,

@@ -45,7 +45,11 @@ export function assessSectorRelevance(place: PlaceDetails, sector: string, leadT
   const normalizedSector = normalize(sector);
   const normalizedName = normalize(place.name);
   const normalizedLabel = normalize(place.typeLabel ?? "");
-  const placeTypes = new Set([place.primaryType, ...(place.types ?? [])].map((value) => value.toLowerCase()));
+  const placeTypes = new Set(
+    [place.primaryType, ...(Array.isArray(place.types) ? place.types : [])]
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.toLowerCase()),
+  );
   const rule = RULES.find((item) => item.match.test(normalizedSector));
   const sectorTokens = normalizedSector.split(/\s+/).filter((token) => token.length >= 4 && !STOP_WORDS.has(token));
   const keywords = [...new Set([...(rule?.keywords ?? []), ...sectorTokens])];
@@ -95,10 +99,11 @@ export function includedTypeForSector(sector: string): string | undefined {
 
 const STOP_WORDS = new Set(["toptancisi", "tedarikcisi", "ureticisi", "firmasi", "sirketi", "ofisi", "salonu", "servisi", "klinigi", "danismani", "malzemeleri", "urunleri", "ozel"]);
 
-export function normalizePlaceText(value: string) {
+export function normalizePlaceText(value: unknown) {
   return normalize(value);
 }
 
-function normalize(value: string) {
+function normalize(value: unknown) {
+  if (typeof value !== "string") return "";
   return value.toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("ı", "i").replaceAll("ş", "s").replaceAll("ğ", "g").replaceAll("ç", "c").replaceAll("ö", "o").replaceAll("ü", "u").replace(/[^a-z0-9]+/g, " ").trim();
 }

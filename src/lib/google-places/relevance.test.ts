@@ -18,4 +18,11 @@ describe("sektör eşleşmesi", () => {
   it("web sitesi sektörünü Google türünden doğrular", () => {
     expect(assessSectorRelevance(place("ABC Hizmetleri", "plumber"), "Tesisatçı", "website").eligible).toBe(true);
   });
+
+  it("Google kategori etiketi nesne geldiğinde çalışma zamanı hatası üretmez", () => {
+    const candidate = place("Marmara Ambalaj", "supplier");
+    (candidate as unknown as { typeLabel: unknown }).typeLabel = { text: "Ambalaj malzemeleri toptancısı", languageCode: "tr" };
+    (candidate as unknown as { types: unknown[] }).types = ["supplier", { unexpected: true }];
+    expect(() => assessSectorRelevance(candidate, "Ambalaj malzemeleri toptancısı", "accounting")).not.toThrow();
+  });
 });
