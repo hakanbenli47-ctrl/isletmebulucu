@@ -15,7 +15,7 @@ const bodySchema = z.object({
   recordContact: z.boolean().default(false),
 }).refine((value) => value.status !== undefined || value.notes !== undefined || value.nextFollowUpAt !== undefined || value.recordContact, "Güncellenecek bir alan gönderin.");
 
-const CLOSES_FOLLOW_UP: LeadStatus[] = ["replied", "interested", "demo_sent", "not_suitable", "no_whatsapp", "opted_out", "customer", "archived"];
+const CLOSES_FOLLOW_UP: LeadStatus[] = ["not_suitable", "no_whatsapp", "opted_out", "customer", "archived"];
 
 export async function PATCH(request: Request, context: RouteContext<"/api/leads/[placeId]">) {
   try {
@@ -35,7 +35,6 @@ export async function PATCH(request: Request, context: RouteContext<"/api/leads/
         record.contact_count += 1;
         record.contacted_at ??= new Date().toISOString();
         record.status = input.status ?? (previousStatus === "new" ? "contacted" : "follow_up");
-        record.next_follow_up_at = addDays(new Date(), record.contact_count === 1 ? 3 : 4).toISOString();
       }
       if (CLOSES_FOLLOW_UP.includes(record.status)) record.next_follow_up_at = null;
       return Response.json({ record });
@@ -56,22 +55,9 @@ export async function PATCH(request: Request, context: RouteContext<"/api/leads/
     let nextFollowUpAt = input.nextFollowUpAt === undefined ? current.next_follow_up_at : input.nextFollowUpAt;
 
     if (input.recordContact) {
-      const { data: settings, error: settingsError } = await supabase
-        .from("app_settings")
-        .select("first_follow_up_days,final_follow_up_days,max_follow_ups")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (settingsError) throw settingsError;
       contactCount += 1;
       contactedAt ??= new Date().toISOString();
       status = input.status ?? (current.status === "new" ? "contacted" : "follow_up");
-      const firstDays = settings?.first_follow_up_days ?? 3;
-      const finalDays = settings?.final_follow_up_days ?? 7;
-      const maxFollowUps = settings?.max_follow_ups ?? 2;
-      const followUpsSent = Math.max(0, contactCount - 1);
-      if (contactCount === 1 && maxFollowUps > 0) nextFollowUpAt = addDays(new Date(contactedAt), firstDays).toISOString();
-      else if (followUpsSent < maxFollowUps) nextFollowUpAt = addDays(new Date(contactedAt), finalDays).toISOString();
-      else nextFollowUpAt = null;
     }
     if (CLOSES_FOLLOW_UP.includes(status)) nextFollowUpAt = null;
     if (status === "new") {
@@ -113,17 +99,11 @@ export async function PATCH(request: Request, context: RouteContext<"/api/leads/
 }
 
 function activityType(status: LeadStatus, recordContact: boolean, hasNote: boolean) {
-  if (recordContact) return status === "follow_up" ? "follow_up" : "message";
   if (status === "replied") return "reply";
+  if (recordContact) return status === "follow_up" ? "follow_up" : "message";
   if (status === "demo_sent") return "demo";
   if (status === "customer") return "customer";
   if (status === "opted_out") return "opt_out";
   if (hasNote) return "note";
   return "status";
-}
-
-function addDays(date: Date, days: number) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
 }

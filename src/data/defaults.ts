@@ -1,44 +1,30 @@
 import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "./sectors";
 import type { AppSettings } from "@/types";
 
-export const DEFAULT_WEBSITE_MESSAGE = `Merhaba, iyi çalışmalar.
+export const FIRST_CONTACT_MESSAGE = "Merhaba, iyi çalışmalar.";
 
-Google işletme profilinizde müşterilerinize güvenle gösterebileceğiniz bağımsız bir web sitesi görünmüyor. İşletmeniz için mobil uyumlu, WhatsApp, telefon ve harita bağlantılı anahtar teslim bir web sitesi hazırlıyoruz.
+// Bu metinler ilk selamdan sonra yalnızca işletme cevap verdiğinde açılır.
+export const DEFAULT_WEBSITE_MESSAGE = `Teşekkür ederim. Sitemix olarak işletmeler için mobil uyumlu, telefon, WhatsApp ve harita bağlantılı web siteleri hazırlıyoruz.
 
-İşletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşmamı ister misiniz?
+Google işletme profilinizde bağımsız bir web sitesi görünmediği için yazdım. Uygun olursa işletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşabilirim. Görmek ister misiniz?`;
 
-Sitemix · www.sitemix.com.tr
-Bu konuda tekrar yazmamamızı isterseniz “istemiyorum” demeniz yeterlidir.`;
+export const DEFAULT_INSTAGRAM_MESSAGE = `Teşekkür ederim. Instagram'daki çalışmalarınızı müşterilerinizin daha düzenli inceleyebileceği, Google'da bulunabilen ve doğrudan WhatsApp'tan ulaşabilecekleri bağımsız bir web sitesinde toplayabiliyoruz.
 
-export const DEFAULT_INSTAGRAM_MESSAGE = `Merhaba, iyi çalışmalar.
+Uygun olursa işletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşabilirim. Görmek ister misiniz?`;
 
-Instagram sayfanızdaki çalışmalarınızı müşterilerinizin daha düzenli inceleyebileceği, Google'da bulunabilen ve doğrudan WhatsApp'tan size ulaşabilecekleri anahtar teslim bir web sitesinde toplayabiliriz.
+export const DEFAULT_ACCOUNTING_MESSAGE = `Teşekkür ederim. Sitemix Ön Muhasebe; stok, cari hesap, kasa, borç-alacak ve günlük satış takibini tek ekranda toplamaya yardımcı oluyor.
 
-İşletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşmamı ister misiniz?
+Size doğru bilgiyi verebilmem için sorayım: işletmenizde bu takipleri şu anda defterle mi, Excel'le mi, yoksa başka bir programla mı yapıyorsunuz?`;
 
-Sitemix · www.sitemix.com.tr
-Bu konuda tekrar yazmamamızı isterseniz “istemiyorum” demeniz yeterlidir.`;
+// Bu metinler ancak işletme ikinci mesaja ilgi gösterdiğinde açılır.
+export const DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE = `Memnuniyetle. İşletmenize uygun örneği hazırlayabilmem için özellikle öne çıkarmamızı istediğiniz hizmeti ve hizmet verdiğiniz bölgeyi yazabilir misiniz? Buna göre kısa bir ana sayfa taslağı paylaşayım.`;
 
-export const DEFAULT_ACCOUNTING_MESSAGE = `Merhaba, iyi çalışmalar.
+export const DEFAULT_INSTAGRAM_FOLLOW_UP_MESSAGE = `Memnuniyetle. Örneği Instagram çalışmalarınıza uygun hazırlayabilmem için özellikle öne çıkarmamızı istediğiniz hizmeti ve hizmet verdiğiniz bölgeyi yazabilir misiniz? Buna göre kısa bir ana sayfa taslağı paylaşayım.`;
 
-Toptan ve stoklu çalışan işletmeler için cari hesap, stok, kasa, borç-alacak ve günlük satış takibini tek ekranda kolaylaştıran Sitemix Ön Muhasebe’yi geliştirdik.
-
-Sistemi incelemek için şimdi kayıt olun ve 7 gün ücretsiz deneyin:
+export const DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE = `Memnuniyetle. Sistemi 7 gün ücretsiz deneyebilirsiniz:
 https://www.sitemix.com.tr/on-muhasebe/kayit
 
-Sitemix
-Bu konuda tekrar yazmamamızı isterseniz “istemiyorum” demeniz yeterlidir.`;
-
-export const DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE = `Merhaba, birkaç gün önce işletmeniz için ücretsiz anahtar teslim web sitesi örneği hakkında yazmıştım. Uygunsanız kısa bir örnek paylaşabilirim. Tekrar yazmamamı isterseniz “istemiyorum” demeniz yeterlidir.`;
-
-export const DEFAULT_INSTAGRAM_FOLLOW_UP_MESSAGE = `Merhaba, birkaç gün önce Instagram çalışmalarınızı bağımsız bir web sitesinde toplamak için ücretsiz örnek hazırlayabileceğimizi paylaşmıştım. İşletmenize özel örneği görmek isterseniz hazırlayabilirim. Tekrar yazmamamı isterseniz “istemiyorum” demeniz yeterlidir.`;
-
-export const DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE = `Merhaba, birkaç gün önce stok, cari, kasa ve borç-alacak takibini kolaylaştıran Sitemix Ön Muhasebe hakkında yazmıştım.
-
-Şimdi kayıt olun ve 7 gün ücretsiz deneyin:
-https://www.sitemix.com.tr/on-muhasebe/kayit
-
-Tekrar yazmamamı isterseniz “istemiyorum” demeniz yeterlidir.`;
+Dilerseniz önce stok, cari hesap, kasa veya borç-alacak takibinde en çok zaman alan kısmı yazın; size en uygun ekranları göstereyim.`;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   resultsPerSearch: 10,
@@ -51,6 +37,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   websiteFollowUpMessage: DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE,
   accountingFollowUpMessage: DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE,
   instagramFollowUpMessage: DEFAULT_INSTAGRAM_FOLLOW_UP_MESSAGE,
+  // Eski kurulumlarla API uyumluluğu için korunur; yeni akış otomatik takip planlamaz.
   firstFollowUpDays: 3,
   finalFollowUpDays: 7,
   maxFollowUps: 2,

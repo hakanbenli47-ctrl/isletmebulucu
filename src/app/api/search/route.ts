@@ -6,11 +6,10 @@ import { DEFAULT_SETTINGS } from "@/data/defaults";
 import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "@/data/sectors";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
 import { searchPlaces } from "@/lib/google-places/client";
-import { filterNewPlaceIds } from "@/lib/google-places/dedupe";
 import { advanceSearchPosition } from "@/lib/google-places/progress";
-import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "@/lib/google-places/website";
-import { assessPotential, orderPotentialPlaces } from "@/lib/google-places/potential";
-import { assessSectorRelevance } from "@/lib/google-places/relevance";
+import { orderPotentialPlaces } from "@/lib/google-places/potential";
+import { createQualificationDiagnostics, formatQualificationSummary, qualifySearchResults } from "@/lib/google-places/qualification";
+import { includedTypeForSector } from "@/lib/google-places/relevance";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -68,6 +67,8 @@ export async function POST(request: Request) {
     position.sectorIndex %= activeSectors.length;
     const maxCalls = Math.min(100, Math.max(1, Number(process.env.GOOGLE_PLACES_MAX_CALLS_PER_SEARCH) || 20));
     const seen = new Set(existingIds);
+    const seenMobiles = new Set<string>();
+    const diagnostics = createQualificationDiagnostics();
     const found: Array<{ details: PlaceDetails; db: Omit<LeadRecord, "details"> }> = [];
     let apiCalls = 0;
     let filteredProvinceIndex = 0;
@@ -77,7 +78,11 @@ export async function POST(request: Request) {
     while (apiCalls < maxCalls && found.length < target) {
       const province = requestedProvince ?? (requestedSector ? TURKIYE_ILLERI[filteredProvinceIndex] : TURKIYE_ILLERI[position.provinceIndex]);
       const sector = requestedSector ?? (requestedProvince ? activeSectors[filteredSectorIndex] : activeSectors[position.sectorIndex]);
-      const searchResults = await searchPlaces(`${sector} ${province}`, sector, province);
+      const searchResults = await searchPlaces(`${sector}, ${province}, Türkiye`, sector, {
+        minRating: minimumRatingForSearch(leadType, quality),
+        includedType: includedTypeForSector(sector),
+        includePureServiceAreaBusinesses: leadType === "website",
+      });
       const results = leadType === "website" ? await enrichInstagramActivity(searchResults) : searchResults;
       apiCalls += 1;
 
@@ -92,17 +97,17 @@ export async function POST(request: Request) {
         position = advanceSearchPosition(position, TURKIYE_ILLERI.length, activeSectors.length);
       }
 
-      const eligible = filterNewPlaceIds(
-        orderPotentialPlaces(results.filter((place) =>
-          place.businessStatus === "OPERATIONAL" &&
-          Boolean(place.phone || place.internationalPhone) &&
-          (leadType === "accounting" || !isIndependentWebsite(place.websiteUri)) &&
-          matchesPresence(place.websiteUri, leadType, presence) &&
-          assessSectorRelevance(place, sector, leadType).eligible &&
-          assessPotential(place, leadType, quality).eligible,
-        ), leadType),
-        seen,
-      ).slice(0, target - found.length);
+      const eligible = qualifySearchResults(orderPotentialPlaces(results, leadType, quality), {
+        leadType,
+        sector,
+        province,
+        quality,
+        presence,
+        seenPlaceIds: seen,
+        seenMobiles,
+        limit: target - found.length,
+        diagnostics,
+      });
 
       if (eligible.length) {
         const rows = eligible.map((place) => ({ user_id: user.id, place_id: place.placeId, lead_type: leadType, status: "new", source_province: province, source_sector: sector }));
@@ -113,7 +118,6 @@ export async function POST(request: Request) {
           const details = byId.get(db.place_id);
           if (details) found.push({ details, db: db as Omit<LeadRecord, "details"> });
         }
-        eligible.forEach((place) => seen.add(place.placeId));
       }
 
       if (
@@ -134,7 +138,7 @@ export async function POST(request: Request) {
     if (writeError) throw writeError;
 
     const detailOrder = new Map(
-      orderPotentialPlaces(found.map((item) => item.details), leadType)
+      orderPotentialPlaces(found.map((item) => item.details), leadType, quality)
         .map((details, index) => [details.placeId, index]),
     );
     const leads = found
@@ -142,7 +146,8 @@ export async function POST(request: Request) {
       .sort((a, b) => (detailOrder.get(a.place_id) ?? 999) - (detailOrder.get(b.place_id) ?? 999));
     const limited = found.length < target;
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
-    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, message: limited ? `Bu taramada ${found.length}${channel} yeni işletme bulundu. Seçilen kanal filtresine uymayan işletmeler gösterilmedi.` : `${found.length}${channel} yeni işletme bulundu.` });
+    const resultLabel = `${found.length}${channel} doğrulanmış yeni işletme bulundu.`;
+    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${formatQualificationSummary(diagnostics)}` });
   } catch (error) {
     return apiError(error);
   }
@@ -155,8 +160,8 @@ function sanitizeSectors(value: unknown, allowed: readonly string[]) {
   return clean.length ? clean : [...allowed];
 }
 
-function matchesPresence(uri: string | null | undefined, leadType: "website" | "accounting", presence: "all" | "instagram" | "no_social") {
-  if (leadType === "accounting" || presence === "all") return true;
-  if (presence === "instagram") return isInstagramProfile(uri);
-  return socialProfileType(uri) === null;
+function minimumRatingForSearch(leadType: "website" | "accounting", quality: "recommended" | "selective" | "broad") {
+  if (leadType === "website") return quality === "broad" ? 3.5 : 4;
+  if (quality === "selective") return 4;
+  return quality === "broad" ? 3 : 3.5;
 }

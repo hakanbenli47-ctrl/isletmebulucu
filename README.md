@@ -135,11 +135,17 @@ Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıfland
 ## Önemli davranışlar
 
 - WhatsApp düğmesi mesajı otomatik göndermez; yalnızca hazır mesajla konuşmayı açar.
-- İlk mesaj açıldığında aday otomatik olarak `İlk mesaj gönderildi` aşamasına alınır ve ilk takip tarihi planlanır.
+- Aday ekranındaki ilk mesaj her işletme için yalnızca `Merhaba, iyi çalışmalar.` metnidir; teklif, bağlantı veya işletme adı eklenmez.
+- İlk selam açıldığında aday `Yanıt bekleniyor` aşamasına alınır; otomatik takip tarihi veya cevap gelmeden tanıtım mesajı oluşturulmaz.
+- İşletme gerçekten cevap verdiyse Satış Merkezi'ndeki `Cevap aldım · 2. mesaj` adımı kullanılır. İkinci mesajdan sonra yeniden cevap beklenir.
+- İşletme açıkça ilgilenirse kayıt `İlgileniyor` aşamasına alınır ve ancak bundan sonra detay/demo mesajı açılır.
 - `Google işletme profilinde bağımsız web sitesi görünmüyor` ifadesi yalnızca Google profilindeki website alanını anlatır; internette hiç site olmadığını garanti etmez.
 - Aynı Place ID her kullanıcı için bir kez saklanır ve farklı aday türünde yeniden gösterilmez.
 - Şehirler alfabetik değil, ticari hareketlilik önceliğiyle taranır.
 - Web sitesi adaylarında dengeli profilde en az 4,0 puan ve 5–250 yorum; ön muhasebe adaylarında en az 3,5 puan ve 2–300 yorum aranır.
+- Yeni adayın faal olması, Türkiye ve seçilen il bilgisinin Google adres bileşenlerinden doğrulanması ve WhatsApp'a uygun gerçek bir Türkiye cep telefonu taşıması zorunludur; sabit telefonlar aday havuzuna alınmaz.
+- Arama metninin yanında Google'ın birincil türü, tüm işletme türleri ve yerelleştirilmiş kategori etiketi birlikte denetlenir. Ön muhasebe adayında genel `toptancı` türüne ek olarak ikinci bir sektör sinyali aranır.
+- Aynı taramada aynı Place ID veya aynı cep telefonuyla dönen şube/tekrarlar tek aday sayılır; eleme nedenlerinin özeti arama sonucunda gösterilir.
 - Ön muhasebede stok/cari hareketi yoğun sabit sektörler, web sitesi adaylarında güçlü yerel görünürlük sinyali bulunan işletmeler önce gösterilir.
 - Aday ekranlarında şehir ve meslek/sektör filtresiyle hedefli arama yapılabilir.
 - `Dengeli`, `Seçici` ve `Geniş` kalite profilleriyle aday havuzunun sıkılığı değiştirilebilir; kurallar sabittir ve yapay zekâ kullanılmaz.
@@ -147,11 +153,11 @@ Testler; telefon normalleştirme, WhatsApp bağlantısı, web sitesi sınıfland
 - Masaüstünde WhatsApp uygulaması (sekmesiz) veya WhatsApp Web (tek çalışma sekmesi) seçilebilir.
 - Google kota veya geçici detay hatasında liste tamamen çökmez; Place ID kayıtları korunur ve erişilemeyen detaylar açıkça belirtilir.
 - Satış Merkezi; cevap, ilgi, demo, takip, müşteri ve iletişim istememe aşamalarını; görüşme notlarını ve sıradaki takip tarihini yönetir.
-- İlk takip varsayılan olarak 3., son takip 7. gündedir. Varsayılan iki takip sınırından sonra yeni takip mesajı kapatılır.
+- Takip tarihi yalnızca kullanıcı tarafından görüşmeye özel olarak planlanır; sistem cevap gelmeyen işletmeye otomatik takip mesajı önermez.
 - `İletişim istemiyor` aşamasındaki kayıtlarda WhatsApp takibi kapatılır.
 - Referans Ağı; mali müşavir, bilgisayarcı, matbaa, tedarikçi ve mevcut müşterilerden gelen tavsiyeleri manuel olarak ölçer.
 - Şehir/sektör performansı sadece sizin satış sonuçlarınızdan hesaplanır; yapay zekâ kullanılmaz.
 - Web adayları `Instagram var · site yok` kanalına göre aranabilir; Instagram bağlantısı ve uygun mesaj otomatik seçilir.
-- Ön muhasebe ilk temas ve takip mesajları kayıt bağlantısını içerir: `https://www.sitemix.com.tr/on-muhasebe/kayit`.
+- Ön muhasebe kayıt bağlantısı ilk selamda veya ikinci mesajda paylaşılmaz; yalnızca işletme ilgi gösterdikten sonraki detay mesajında açılır: `https://www.sitemix.com.tr/on-muhasebe/kayit`.
 - Aday listelerinde klasik sayfalama yoktur; aşağı kaydırıldıkça diğer kayıtlar otomatik yüklenir ve filtreler mevcut listeye anında uygulanır.
-- Arama sonuçları sektör adı ve Google işletme türüyle doğrulanır; alakasız sektör sonuçları aday havuzuna eklenmez.
+- Arama sonuçları sektör adı, Google işletme türleri, kategori etiketi, faaliyet durumu, il/ülke, cep telefonu, puan ve yorum kalitesiyle doğrulanır; ölçütlerden geçmeyen sonuçlar aday havuzuna eklenmez.

@@ -5,7 +5,7 @@ const SEARCH_FIELDS = [
   "places.id", "places.displayName", "places.formattedAddress", "places.addressComponents",
   "places.nationalPhoneNumber", "places.internationalPhoneNumber", "places.websiteUri",
   "places.googleMapsUri", "places.businessStatus", "places.primaryType",
-  "places.rating", "places.userRatingCount",
+  "places.types", "places.googleMapsTypeLabel", "places.rating", "places.userRatingCount",
 ].join(",");
 
 const DETAIL_FIELDS = SEARCH_FIELDS.replaceAll("places.", "");
@@ -14,13 +14,15 @@ interface GooglePlace {
   id?: string;
   displayName?: { text?: string };
   formattedAddress?: string;
-  addressComponents?: Array<{ longText?: string; types?: string[] }>;
+  addressComponents?: Array<{ longText?: string; shortText?: string; types?: string[] }>;
   nationalPhoneNumber?: string;
   internationalPhoneNumber?: string;
   websiteUri?: string;
   googleMapsUri?: string;
   businessStatus?: string;
   primaryType?: string;
+  types?: string[];
+  googleMapsTypeLabel?: string;
   rating?: number;
   userRatingCount?: number;
 }
@@ -38,11 +40,14 @@ function apiKey() {
   return key;
 }
 
-function mapPlace(place: GooglePlace, sector?: string, fallbackProvince = ""): PlaceDetails | null {
+function mapPlace(place: GooglePlace, sector?: string): PlaceDetails | null {
   if (!place.id) return null;
   const province = place.addressComponents?.find((item) =>
     item.types?.includes("administrative_area_level_1"),
-  )?.longText ?? fallbackProvince;
+  )?.longText ?? "";
+  const countryCode = place.addressComponents?.find((item) =>
+    item.types?.includes("country"),
+  )?.shortText?.toUpperCase();
   return {
     placeId: place.id,
     name: place.displayName?.text ?? "İsimsiz işletme",
@@ -54,6 +59,9 @@ function mapPlace(place: GooglePlace, sector?: string, fallbackProvince = ""): P
     googleMapsUri: place.googleMapsUri ?? `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(place.id)}`,
     businessStatus: place.businessStatus ?? "UNKNOWN",
     primaryType: place.primaryType ?? "İşletme",
+    types: place.types ?? [],
+    typeLabel: place.googleMapsTypeLabel,
+    countryCode,
     rating: place.rating ?? null,
     userRatingCount: place.userRatingCount ?? 0,
     sector,
@@ -85,15 +93,34 @@ async function googleFetch(url: string, init?: RequestInit) {
   return response;
 }
 
-export async function searchPlaces(query: string, sector: string, province: string) {
+export interface PlaceSearchOptions {
+  minRating?: number;
+  includedType?: string;
+  includePureServiceAreaBusinesses?: boolean;
+}
+
+export async function searchPlaces(query: string, sector: string, options: PlaceSearchOptions = {}) {
+  const body: Record<string, unknown> = {
+    textQuery: query,
+    languageCode: "tr",
+    regionCode: "TR",
+    pageSize: 20,
+    rankPreference: "RELEVANCE",
+    includePureServiceAreaBusinesses: options.includePureServiceAreaBusinesses ?? false,
+  };
+  if (options.minRating !== undefined) body.minRating = options.minRating;
+  if (options.includedType) {
+    body.includedType = options.includedType;
+    body.strictTypeFiltering = false;
+  }
   const response = await googleFetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: { "X-Goog-FieldMask": SEARCH_FIELDS },
-    body: JSON.stringify({ textQuery: query, languageCode: "tr", regionCode: "TR", pageSize: 20 }),
+    body: JSON.stringify(body),
   });
   const data = (await response.json()) as { places?: GooglePlace[] };
   return (data.places ?? [])
-    .map((place) => mapPlace(place, sector, province))
+    .map((place) => mapPlace(place, sector))
     .filter((place): place is PlaceDetails => Boolean(place));
 }
 

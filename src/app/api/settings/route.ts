@@ -37,7 +37,24 @@ export async function GET() {
     ]);
     const webTemplate = templates?.find((item) => item.lead_type === "website")?.message;
     const accountingTemplate = templates?.find((item) => item.lead_type === "accounting")?.message;
-    return Response.json({ settings: { resultsPerSearch: settings?.results_per_search ?? DEFAULT_SETTINGS.resultsPerSearch, dailyContactGoal: settings?.daily_contact_goal ?? DEFAULT_SETTINGS.dailyContactGoal, websiteSectors: sanitizeSectors(settings?.website_sectors, WEBSITE_SECTORS), accountingSectors: sanitizeSectors(settings?.accounting_sectors, ACCOUNTING_SECTORS), websiteMessage: webTemplate ?? DEFAULT_WEBSITE_MESSAGE, accountingMessage: accountingTemplate ?? DEFAULT_ACCOUNTING_MESSAGE, instagramMessage: settings?.instagram_message || DEFAULT_INSTAGRAM_MESSAGE, websiteFollowUpMessage: settings?.website_follow_up_message || DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE, accountingFollowUpMessage: settings?.accounting_follow_up_message || DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE, instagramFollowUpMessage: settings?.instagram_follow_up_message || DEFAULT_INSTAGRAM_FOLLOW_UP_MESSAGE, firstFollowUpDays: settings?.first_follow_up_days ?? DEFAULT_SETTINGS.firstFollowUpDays, finalFollowUpDays: settings?.final_follow_up_days ?? DEFAULT_SETTINGS.finalFollowUpDays, maxFollowUps: settings?.max_follow_ups ?? DEFAULT_SETTINGS.maxFollowUps }, defaults: DEFAULT_SETTINGS });
+    return Response.json({
+      settings: {
+        resultsPerSearch: settings?.results_per_search ?? DEFAULT_SETTINGS.resultsPerSearch,
+        dailyContactGoal: settings?.daily_contact_goal ?? DEFAULT_SETTINGS.dailyContactGoal,
+        websiteSectors: sanitizeSectors(settings?.website_sectors, WEBSITE_SECTORS),
+        accountingSectors: sanitizeSectors(settings?.accounting_sectors, ACCOUNTING_SECTORS),
+        websiteMessage: replaceLegacySecondMessage(webTemplate, DEFAULT_WEBSITE_MESSAGE),
+        accountingMessage: replaceLegacySecondMessage(accountingTemplate, DEFAULT_ACCOUNTING_MESSAGE),
+        instagramMessage: replaceLegacySecondMessage(settings?.instagram_message, DEFAULT_INSTAGRAM_MESSAGE),
+        websiteFollowUpMessage: replaceLegacyDetailMessage(settings?.website_follow_up_message, DEFAULT_WEBSITE_FOLLOW_UP_MESSAGE),
+        accountingFollowUpMessage: replaceLegacyDetailMessage(settings?.accounting_follow_up_message, DEFAULT_ACCOUNTING_FOLLOW_UP_MESSAGE),
+        instagramFollowUpMessage: replaceLegacyDetailMessage(settings?.instagram_follow_up_message, DEFAULT_INSTAGRAM_FOLLOW_UP_MESSAGE),
+        firstFollowUpDays: settings?.first_follow_up_days ?? DEFAULT_SETTINGS.firstFollowUpDays,
+        finalFollowUpDays: settings?.final_follow_up_days ?? DEFAULT_SETTINGS.finalFollowUpDays,
+        maxFollowUps: settings?.max_follow_ups ?? DEFAULT_SETTINGS.maxFollowUps,
+      },
+      defaults: DEFAULT_SETTINGS,
+    });
   } catch (error) { return apiError(error); }
 }
 
@@ -46,6 +63,21 @@ function sanitizeSectors(value: unknown, allowed: readonly string[]) {
   if (value.some((item) => typeof item === "string" && !allowed.includes(item))) return [...allowed];
   const clean = value.filter((item): item is string => typeof item === "string" && allowed.includes(item));
   return clean.length ? clean : [...allowed];
+}
+
+function replaceLegacySecondMessage(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const normalized = value.toLocaleLowerCase("tr-TR");
+  const isOldFirstContact = normalized.startsWith("merhaba, iyi çalışmalar") &&
+    (normalized.includes("tekrar yazmamamızı") || normalized.includes("7 gün ücretsiz deneyin"));
+  return isOldFirstContact ? fallback : value;
+}
+
+function replaceLegacyDetailMessage(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const normalized = value.toLocaleLowerCase("tr-TR");
+  const isOldUnansweredFollowUp = normalized.includes("birkaç gün önce") || normalized.includes("tekrar yazmamamı isterseniz");
+  return isOldUnansweredFollowUp ? fallback : value;
 }
 
 export async function PUT(request: Request) {

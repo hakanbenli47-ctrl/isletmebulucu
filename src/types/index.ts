@@ -25,6 +25,9 @@ export interface PlaceDetails {
   googleMapsUri: string;
   businessStatus: string;
   primaryType: string;
+  types?: string[];
+  typeLabel?: string;
+  countryCode?: string;
   rating: number | null;
   userRatingCount: number;
   instagramActivity?: "active" | "inactive" | "unverified";

@@ -15,8 +15,6 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
   const { leads, setLeads, total, setTotal, loading, loadingMore, hasMore, loadMore, error, setError, warning } = useLeads(leadType);
   const [searching, setSearching] = useState(false);
   const [notice, setNotice] = useState("");
-  const [message, setMessage] = useState("");
-  const [instagramMessage, setInstagramMessage] = useState("");
   const [availableSectors, setAvailableSectors] = useState<string[]>([]);
   const [resultsPerSearch, setResultsPerSearch] = useState(10);
   const [provinceFilter, setProvinceFilter] = useState("");
@@ -31,13 +29,11 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((data: { settings: AppSettings }) => {
-      setMessage(leadType === "website" ? data.settings.websiteMessage : data.settings.accountingMessage);
-      setInstagramMessage(data.settings.instagramMessage);
       setAvailableSectors(leadType === "website" ? data.settings.websiteSectors : data.settings.accountingSectors);
       setResultsPerSearch(data.settings.resultsPerSearch);
-    }).catch(() => setMessage("Merhaba, iyi çalışmalar."));
+    }).catch(() => setError("Arama ayarları yüklenemedi."));
     return () => { if (undoTimer.current) clearTimeout(undoTimer.current); };
-  }, [leadType]);
+  }, [leadType, setError]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -103,15 +99,15 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
         <label><span><Search size={15} />Aday kalitesi</span><select value={qualityFilter} onChange={(event) => setQualityFilter(event.target.value as LeadQuality)}><option value="recommended">Dengeli · önerilen</option><option value="selective">Seçici · güçlü profil</option><option value="broad">Geniş · daha çok aday</option></select></label>
         {leadType === "website" && <label><span><Camera size={15} />Dijital kanal</span><select value={presenceFilter} onChange={(event) => setPresenceFilter(event.target.value as PresenceFilter)}><option value="all">Tümü · site ihtiyacı olanlar</option><option value="instagram">Instagram var · site yok</option><option value="no_social">Sosyal profil görünmüyor</option></select></label>}
         {(provinceFilter || sectorFilter || qualityFilter !== "recommended" || presenceFilter !== "all") && <button className="clear-filters" onClick={() => { setProvinceFilter(""); setSectorFilter(""); setQualityFilter("recommended"); setPresenceFilter("all"); }}><RotateCcw size={14} />Filtreleri temizle</button>}
-        <p>{presenceFilter === "instagram" ? "Yalnızca Google işletme profilinde Instagram bağlantısı bulunan ve bağımsız sitesi olmayan işletmeler getirilir." : provinceFilter && sectorFilter ? "Seçilen şehir ve meslek için hedefli arama yapılır." : qualityFilter === "selective" ? "Daha yüksek puan ve yorum sinyali bulunan işletmeler seçilir." : qualityFilter === "broad" ? "Daha az yorumlu işletmeler de değerlendirilir; sonuç sayısı artabilir." : "Boş bırakılan alanlarda kayıtlı öncelik sırası ve dengeli kalite kuralları kullanılır."}</p>
+        <p>{presenceFilter === "instagram" ? "Seçilen ilde doğrulanan, faal, WhatsApp'a uygun cep telefonlu, Instagram bağlantısı bulunan ve bağımsız sitesi olmayan işletmeler getirilir." : provinceFilter && sectorFilter ? "Seçilen şehir ve meslek için; konum, sektör, faaliyet, cep telefonu, puan ve yorum sinyalleri birlikte doğrulanır." : qualityFilter === "selective" ? "Yalnızca en güçlü puan, yorum, sektör ve iletişim sinyalleri bulunan işletmeler seçilir." : qualityFilter === "broad" ? "Daha az yorumlu işletmeler de değerlendirilir; şehir, sektör, faaliyet ve cep telefonu doğrulaması yine zorunludur." : "Faal durum, doğru il, WhatsApp'a uygun cep telefonu, sektör uyumu, puan ve yorum kalitesi zorunlu olarak denetlenir."}</p>
       </div>
       {notice && <div className="notice success" role="status">{notice}</div>}
       {warning && <div className="notice warning" role="status">{warning}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       {!loading && <div className="result-summary"><strong>{visibleLeads.length}</strong> eşleşen aday · <span>{leads.length}/{total} aday yüklendi</span></div>}
-      <LeadList leads={visibleLeads} leadType={leadType} loading={loading} whatsappMessage={message} instagramMessage={instagramMessage} onContact={contact} onStatus={changeStatus} />
+      <LeadList leads={visibleLeads} leadType={leadType} loading={loading} onContact={contact} onStatus={changeStatus} />
       <div ref={loadMoreRef} className="infinite-loader">{loadingMore && <><span className="spinner" />Diğer adaylar sıralanıyor…</>}{!loadingMore && hasMore && <button onClick={() => void loadMore()}>Daha fazla aday yükle</button>}{!hasMore && leads.length > 0 && <span>Tüm adaylar gösterildi.</span>}</div>
-      {undoLead && <div className="undo-toast"><span><strong>{undoLead.details.name}</strong> mesaj gönderilenlere taşındı.</span><button onClick={undo}><Undo2 size={16} />Geri Al</button><span className="undo-progress" /></div>}
+      {undoLead && <div className="undo-toast"><span><strong>{undoLead.details.name}</strong> için ilk selam açıldı ve Satış Merkezi&apos;ne taşındı.</span><button onClick={undo}><Undo2 size={16} />Geri Al</button><span className="undo-progress" /></div>}
     </section>
   );
 }
@@ -121,12 +117,12 @@ function filterAndSortLeads(leads: LeadRecord[], leadType: LeadType, province: s
     const details = lead.details;
     if (province && details.province !== province && lead.source_province !== province) return false;
     if (sector && details.sector !== sector && lead.source_sector !== sector) return false;
-    if (quality !== "recommended" && details.businessStatus !== "UNKNOWN" && !assessPotential(details, leadType, quality).eligible) return false;
+    if (details.businessStatus !== "UNKNOWN" && !assessPotential(details, leadType, quality).eligible) return false;
     if (leadType === "website" && presence === "instagram" && !isInstagramProfile(details.websiteUri)) return false;
     if (leadType === "website" && presence === "no_social" && socialProfileType(details.websiteUri) !== null) return false;
     return true;
   });
-  const order = new Map(orderPotentialPlaces(filtered.map((lead) => lead.details), leadType).map((details, index) => [details.placeId, index]));
+  const order = new Map(orderPotentialPlaces(filtered.map((lead) => lead.details), leadType, quality).map((details, index) => [details.placeId, index]));
   return filtered.sort((a, b) => (order.get(a.place_id) ?? 9999) - (order.get(b.place_id) ?? 9999));
 }
 

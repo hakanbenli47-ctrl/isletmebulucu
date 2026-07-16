@@ -50,6 +50,11 @@ describe("potansiyel aday kuralları", () => {
     expect(assessPotential(candidate, "website", "broad").eligible).toBe(true);
   });
 
+  it("sabit telefonlu işletmeyi puanı yüksek olsa da aday saymaz", () => {
+    const result = assessPotential(place({ phone: "0212 123 45 67", internationalPhone: "+90 212 123 45 67", rating: 4.9, userRatingCount: 40 }), "website");
+    expect(result.eligible).toBe(false);
+  });
+
   it("öncelikli adayları ve ideal yorum aralığını önce sıralar", () => {
     const ordered = orderPotentialPlaces([
       place({ placeId: "çok-yorum", rating: 4.8, userRatingCount: 220 }),

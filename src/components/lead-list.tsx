@@ -1,11 +1,12 @@
 "use client";
 
 import { Archive, Ban, Camera, ChevronDown, CircleOff, ExternalLink, Laptop, MessageCircle, Smartphone, Star, UserRoundCheck } from "lucide-react";
-import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, personalizeWhatsAppMessage } from "@/lib/whatsapp";
+import { FIRST_CONTACT_MESSAGE } from "@/data/defaults";
+import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl } from "@/lib/whatsapp";
 import { isInstagramProfile } from "@/lib/google-places/website";
 import type { LeadRecord, LeadStatus, LeadType } from "@/types";
 
-export default function LeadList({ leads, leadType, loading, whatsappMessage = "", instagramMessage = "", onContact, onStatus, contacted = false }: { leads: LeadRecord[]; leadType?: LeadType; loading: boolean; whatsappMessage?: string; instagramMessage?: string; onContact?: (lead: LeadRecord) => void; onStatus: (lead: LeadRecord, status: LeadStatus) => void; contacted?: boolean }) {
+export default function LeadList({ leads, leadType, loading, onContact, onStatus, contacted = false }: { leads: LeadRecord[]; leadType?: LeadType; loading: boolean; onContact?: (lead: LeadRecord) => void; onStatus: (lead: LeadRecord, status: LeadStatus) => void; contacted?: boolean }) {
   if (loading) return <div className="state"><span className="spinner" />İşletmeler yükleniyor…</div>;
   if (!leads.length) return <div className="empty-state"><strong>Gösterilecek işletme yok</strong><span>{contacted ? "Bu filtrede iletişim kaydı bulunamadı." : "Yeni bir tarama başlatarak aday listenizi oluşturun."}</span></div>;
   return (
@@ -15,11 +16,10 @@ export default function LeadList({ leads, leadType, loading, whatsappMessage = "
         {leads.map((lead) => {
           const place = lead.details;
           const hasInstagram = isInstagramProfile(place.websiteUri);
-          const personalizedMessage = personalizeWhatsAppMessage(hasInstagram && lead.lead_type === "website" ? instagramMessage || whatsappMessage : whatsappMessage, place.name);
           const phone = place.internationalPhone ?? place.phone ?? "";
-          const whatsappUrl = buildWhatsAppUrl(phone, personalizedMessage);
-          const desktopUrl = buildWhatsAppDesktopUrl(phone, personalizedMessage);
-          const webUrl = buildWhatsAppWebUrl(phone, personalizedMessage);
+          const whatsappUrl = buildWhatsAppUrl(phone, FIRST_CONTACT_MESSAGE);
+          const desktopUrl = buildWhatsAppDesktopUrl(phone, FIRST_CONTACT_MESSAGE);
+          const webUrl = buildWhatsAppWebUrl(phone, FIRST_CONTACT_MESSAGE);
           return <article className="lead-row" role="row" key={lead.place_id}>
             <div className="lead-name"><div><strong>{place.name}</strong><div className="badges">{place.isDemo && <span className="badge demo">Demo veri</span>}{place.potentialScore !== undefined && <span className={`badge ${place.potentialLevel === "high" ? "potential" : "score"}`}>{place.potentialScore}/100 potansiyel</span>}{leadType === "website" && <span className={`badge ${hasInstagram ? "instagram" : "warning"}`}>{hasInstagram ? "Instagram var · site yok" : "Web sitesi görünmüyor"}</span>}{hasInstagram && <span className={`badge instagram-${place.instagramActivity ?? "unverified"}`}>{instagramActivityLabel(place.instagramActivity)}</span>}</div><span className="rating-line"><Star size={13} fill="currentColor" />{place.rating?.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) ?? "—"}<span>· {place.userRatingCount} yorum</span></span></div><a className="maps-source" href={place.googleMapsUri} target="_blank" rel="noreferrer">Google Maps <ExternalLink size={13} /></a></div>
             <div className="lead-location"><strong>{place.province || "Şehir bilgisi yok"}</strong><span>{place.address}</span><small>{formatType(place.sector ?? place.primaryType)}</small>{place.potentialReason && <small className="potential-reason">{place.potentialReason}</small>}</div>
@@ -27,7 +27,7 @@ export default function LeadList({ leads, leadType, loading, whatsappMessage = "
             {contacted && <div className="contact-date"><strong>{lead.lead_type === "website" ? "Web sitesi" : "Ön muhasebe"}</strong><span>{lead.contacted_at ? new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.contacted_at)) : "—"}</span></div>}
             <div className="lead-actions">
               {!contacted && (whatsappUrl && desktopUrl && webUrl
-                ? <details className="whatsapp-menu"><summary className="whatsapp-button"><MessageCircle size={16} />WhatsApp<ChevronDown size={13} /></summary><div className="whatsapp-options"><a className="desktop-option" href={desktopUrl} onClick={() => onContact?.(lead)}><Laptop size={16} /><span><strong>Masaüstü uygulaması</strong><small>Yeni sekme açmaz</small></span></a><a className="desktop-option" href={webUrl} target="isletme-bulucu-whatsapp" onClick={() => onContact?.(lead)}><MessageCircle size={16} /><span><strong>WhatsApp Web</strong><small>Tek çalışma sekmesi</small></span></a><a className="mobile-option" href={whatsappUrl} onClick={() => onContact?.(lead)}><Smartphone size={16} /><span><strong>WhatsApp’ta aç</strong><small>Telefon uygulaması</small></span></a></div></details>
+                ? <details className="whatsapp-menu"><summary className="whatsapp-button"><MessageCircle size={16} />1. mesaj<ChevronDown size={13} /></summary><div className="whatsapp-options"><a className="desktop-option" href={desktopUrl} onClick={() => onContact?.(lead)}><Laptop size={16} /><span><strong>Masaüstü uygulaması</strong><small>Yalnızca “Merhaba, iyi çalışmalar.”</small></span></a><a className="desktop-option" href={webUrl} target="isletme-bulucu-whatsapp" onClick={() => onContact?.(lead)}><MessageCircle size={16} /><span><strong>WhatsApp Web</strong><small>Yalnızca kısa selamı açar</small></span></a><a className="mobile-option" href={whatsappUrl} onClick={() => onContact?.(lead)}><Smartphone size={16} /><span><strong>WhatsApp’ta aç</strong><small>Yalnızca kısa selamı açar</small></span></a></div></details>
                 : <button className="whatsapp-button" disabled title="Geçerli cep telefonu yok"><MessageCircle size={16} />WhatsApp</button>)}
               <a className="action-button" href={place.googleMapsUri} target="_blank" rel="noreferrer"><ExternalLink size={15} />Harita</a>
               {hasInstagram && <a className="action-button instagram-button" href={place.websiteUri!} target="_blank" rel="noreferrer"><Camera size={15} />Instagram</a>}
