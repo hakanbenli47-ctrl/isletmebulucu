@@ -10,6 +10,13 @@ export function normalizeTurkishPhone(value: string | null | undefined): string 
   return digits;
 }
 
+export function formatTurkishMobilePhone(value: string | null | undefined): string | null {
+  const normalized = normalizeTurkishPhone(value);
+  if (!normalized) return null;
+  const local = `0${normalized.slice(2)}`;
+  return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7, 9)} ${local.slice(9, 11)}`;
+}
+
 export function buildWhatsAppUrl(phone: string, message: string): string | null {
   const normalized = normalizeTurkishPhone(phone);
   if (!normalized) return null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
+import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, formatTurkishMobilePhone, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
 
 describe("normalizeTurkishPhone", () => {
   it.each([
@@ -13,6 +13,16 @@ describe("normalizeTurkishPhone", () => {
 
   it.each(["123", "0212 123 45 67", "", null])("geçersiz numarayı reddeder", (input) => {
     expect(normalizeTurkishPhone(input)).toBeNull();
+  });
+});
+
+describe("formatTurkishMobilePhone", () => {
+  it("cep telefonunu okunabilir yerel biçimde gösterir", () => {
+    expect(formatTurkishMobilePhone("+90 532 123 45 67")).toBe("0532 123 45 67");
+  });
+
+  it("geçersiz veya sabit telefonu biçimlendirmez", () => {
+    expect(formatTurkishMobilePhone("0212 123 45 67")).toBeNull();
   });
 });
 

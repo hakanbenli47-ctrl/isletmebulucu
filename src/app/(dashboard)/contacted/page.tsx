@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, ExternalLink, Laptop, MessageCircle, Save, Target, TrendingUp, UsersRound } from "lucide-react";
-import { buildWhatsAppDesktopUrl, buildWhatsAppWebUrl } from "@/lib/whatsapp";
+import { CalendarClock, ExternalLink, Laptop, MessageCircle, Phone, RefreshCw, Save, Target, TrendingUp, UsersRound } from "lucide-react";
+import { buildWhatsAppDesktopUrl, buildWhatsAppWebUrl, formatTurkishMobilePhone } from "@/lib/whatsapp";
 import { isInstagramProfile } from "@/lib/google-places/website";
 import type { AppSettings, LeadRecord, LeadStatus } from "@/types";
 
@@ -27,6 +27,7 @@ const STATUS_OPTIONS: Array<[LeadStatus, string]> = [
 ];
 
 const EMPTY_STATS: Stats = { today: 0, week: 0, total: 0, replies: 0, interested: 0, customers: 0, due: 0, dailyGoal: 20, conversionRate: 0, pipeline: {}, segments: [] };
+const AUTO_REFRESH_MS = 15_000;
 
 export default function SalesCenterPage() {
   const [filter, setFilter] = useState<Filter>("contacted");
@@ -37,6 +38,7 @@ export default function SalesCenterPage() {
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const refresh = useCallback(() => { setLoading(true); setRefreshKey((value) => value + 1); }, []);
 
@@ -54,7 +56,7 @@ export default function SalesCenterPage() {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
-        setLeads(data.leads); setStats(data.stats); setError(""); setWarning(data.warning ?? "");
+        setLeads(data.leads); setStats(data.stats); setError(""); setWarning(data.warning ?? ""); setLastUpdatedAt(new Date());
       })
       .catch((caught) => {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -64,10 +66,15 @@ export default function SalesCenterPage() {
     return () => controller.abort();
   }, [filter, refreshKey]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setRefreshKey((value) => value + 1), AUTO_REFRESH_MS);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const goalPercent = Math.min(100, Math.round((stats.today / Math.max(1, stats.dailyGoal)) * 100));
   return (
     <section className="sales-center">
-      <div className="page-heading compact"><div><p className="eyebrow">Nazik ve sıralı iletişim</p><h1>Satış Merkezi</h1><p>Önce yalnızca selam verin; cevap gelirse ikinci mesajı, ilgi oluşursa detay veya demoyu açın.</p></div></div>
+      <div className="page-heading compact"><div><p className="eyebrow">Nazik ve sıralı iletişim</p><h1>Satış Merkezi</h1><p>Önce yalnızca selam verin; cevap gelirse ikinci mesajı, ilgi oluşursa detay veya demoyu açın.</p></div><div className="auto-refresh-status" aria-live="polite"><RefreshCw size={14} /><span>15 saniyede bir otomatik güncellenir{lastUpdatedAt ? ` · Son: ${lastUpdatedAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}</span></div></div>
 
       <div className="sales-kpis">
         <Kpi icon={Target} value={`${stats.today}/${stats.dailyGoal}`} label="Bugünkü ilk selam" />
@@ -100,6 +107,7 @@ function CrmLeadCard({ lead, settings, onUpdated, onError }: { lead: LeadRecord;
   const [followUp, setFollowUp] = useState(toLocalInput(lead.next_follow_up_at));
   const [saving, setSaving] = useState(false);
   const phone = lead.details.internationalPhone ?? lead.details.phone ?? "";
+  const phoneDisplay = (formatTurkishMobilePhone(phone) ?? phone.trim()) || "Telefon yok";
   const secondMessage = lead.lead_type === "website"
     ? isInstagramProfile(lead.details.websiteUri) ? settings?.instagramMessage : settings?.websiteMessage
     : settings?.accountingMessage;
@@ -136,7 +144,7 @@ function CrmLeadCard({ lead, settings, onUpdated, onError }: { lead: LeadRecord;
   }
 
   return <article className="crm-card">
-    <div className="crm-business"><div><div className="badges"><span className={`badge stage ${lead.status}`}>{statusLabel(lead.status)}</span>{lead.details.potentialScore !== undefined && <span className="badge score">{lead.details.potentialScore}/100</span>}<span className="badge type">{lead.lead_type === "website" ? "Web sitesi" : "Ön muhasebe"}</span></div><h3>{lead.details.name}</h3><p>{lead.details.address}</p><small>{[lead.source_sector, lead.source_province].filter(Boolean).join(" · ") || "Kaynak bilgisi eski kayıtta yok"}</small></div><div className="crm-links"><a href={lead.details.googleMapsUri} target="_blank" rel="noreferrer">Harita <ExternalLink size={13} /></a><span>{lead.contact_count} mesaj adımı</span></div></div>
+    <div className="crm-business"><div><div className="badges"><span className={`badge stage ${lead.status}`}>{statusLabel(lead.status)}</span>{lead.details.potentialScore !== undefined && <span className="badge score">{lead.details.potentialScore}/100</span>}<span className="badge type">{lead.lead_type === "website" ? "Web sitesi" : "Ön muhasebe"}</span></div><h3>{lead.details.name}</h3><a className="crm-phone" href={phone ? `tel:${phone}` : undefined}><Phone size={15} /><span>{phoneDisplay}</span></a><p>{lead.details.address}</p><small>{[lead.source_sector, lead.source_province].filter(Boolean).join(" · ") || "Kaynak bilgisi eski kayıtta yok"}</small></div><div className="crm-links"><a href={lead.details.googleMapsUri} target="_blank" rel="noreferrer">Harita <ExternalLink size={13} /></a><span>{lead.contact_count} mesaj adımı</span></div></div>
     <div className="crm-editor"><label>Aşama<select value={status} onChange={(event) => setStatus(event.target.value as LeadStatus)}>{STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Gerekirse takip planla<input type="datetime-local" value={followUp} onChange={(event) => setFollowUp(event.target.value)} /></label><label className="crm-notes">Görüşme notu<textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Verdiği cevap, ihtiyacı, kullandığı yöntem veya sonraki adım…" /></label><button className="primary-button" disabled={saving} onClick={save}><Save size={15} />{saving ? "Kaydediliyor…" : "Kaydet"}</button></div>
     <div className="crm-footer"><span>{sequenceHint(lead)}</span>{canOpenSequence ? <details className="followup-menu"><summary><MessageCircle size={15} />{sequence!.label}</summary><div><a href={desktopUrl!} onClick={recordSequenceStep}><Laptop size={15} />Masaüstü WhatsApp</a><a href={webUrl!} target="isletme-bulucu-whatsapp" onClick={recordSequenceStep}><MessageCircle size={15} />WhatsApp Web</a></div></details> : <small>{sequence && !phone ? "Geçerli cep telefonu bulunamadı" : sequence && !settings ? "Mesaj ayarları yükleniyor" : lead.status === "replied" ? "Şimdi ikinci mesaja gelecek yanıtı bekleyin; ilgi varsa aşamayı güncelleyin." : lead.status === "demo_sent" ? "Detay gönderildi; yeni mesaj için işletmenin dönüşünü bekleyin." : lead.status === "opted_out" ? "İletişim talebi nedeniyle mesaj kapalı" : "Bu aşamada otomatik mesaj önerilmez."}</small>}</div>
   </article>;
