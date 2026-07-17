@@ -1,5 +1,7 @@
 import "server-only";
 import { normalizeTurkishPhone } from "@/lib/whatsapp";
+import { normalizePhoneSearch } from "@/lib/phone-search";
+import { isOpenedWithinLastTwoYears } from "@/lib/places/activity";
 import type { PlaceDetails } from "@/types";
 
 const DEFAULT_API_URL = "https://nominatim.openstreetmap.org";
@@ -86,6 +88,7 @@ interface OverpassElement {
   type?: "node" | "way" | "relation";
   id?: number;
   tags?: Record<string, string>;
+  timestamp?: string;
 }
 
 type CacheItem<T> = { expiresAt: number; value: T };
@@ -130,7 +133,9 @@ function mapOverpassPlace(
   if (!element.type || !element.id || !tags.name) return null;
   const rawPhone = firstPhone(tags);
   const mobile = normalizeTurkishPhone(rawPhone);
+  const normalizedPhone = normalizePhoneSearch(rawPhone);
   const primary = primaryOsmType(tags);
+  const activity = activityFromTags(tags, element.timestamp);
   const address = [
     tags["addr:street"],
     tags["addr:housenumber"],
@@ -144,10 +149,10 @@ function mapOverpassPlace(
     address: address || context.province,
     province: context.province,
     phone: rawPhone,
-    internationalPhone: mobile ? `+${mobile}` : rawPhone,
+    internationalPhone: mobile ? `+${mobile}` : normalizedPhone ? `+${normalizedPhone}` : rawPhone,
     websiteUri: firstWebsite(tags),
     mapUri: `https://www.openstreetmap.org/${element.type}/${element.id}`,
-    businessStatus: isClosed(tags) ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
+    businessStatus: activity.closed ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
     primaryType: primary.value,
     types: [primary.key, primary.value, `${primary.key}:${primary.value}`],
     typeLabel: context.sector,
@@ -156,22 +161,30 @@ function mapOverpassPlace(
     userRatingCount: 0,
     sector: context.sector,
     dataSource: "openstreetmap",
+    activityConfidence: activity.confidence,
+    activityReason: activity.reason,
+    openingHours: tags.opening_hours,
+    lastVerifiedAt: activity.lastVerifiedAt,
+    openedAt: activity.openedAt,
   };
 }
 
 async function overpassSearch(sector: string, province: string): Promise<OverpassElement[]> {
   const selectors = SECTOR_SELECTORS[sector] ?? [`["name"~"${escapeOverpassRegex(sector)}",i]`];
-  const phoneFilter = '[~"^(contact:)?(mobile|phone)$"~"."]';
+  const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
   const query = [
     "[out:json][timeout:25];",
     `area["boundary"="administrative"]["name"="${escapeOverpassString(province)}"]->.searchArea;`,
     "(",
-    ...selectors.map((selector) => `nwr${selector}${phoneFilter}(area.searchArea);`),
+    ...selectors.flatMap((selector) => [
+      `nwr${selector}${phoneFilter}["start_date"](area.searchArea);`,
+      `nwr${selector}${phoneFilter}["opening_date"](area.searchArea);`,
+    ]),
     ");",
-    "out center tags 80;",
+    "out center meta 80;",
   ].join("\n");
   const apiUrl = process.env.OVERPASS_API_URL || DEFAULT_OVERPASS_API_URL;
-  const cacheKey = `${apiUrl}|${province}|${sector}`;
+  const cacheKey = `recent-openings-v2|${apiUrl}|${province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -253,6 +266,8 @@ export function mapNominatimPlace(
   const tags = place.extratags ?? {};
   const rawPhone = firstPhone(tags);
   const mobile = normalizeTurkishPhone(rawPhone);
+  const normalizedPhone = normalizePhoneSearch(rawPhone);
+  const activity = activityFromTags(tags);
   const province = context.province ?? addressProvince(place.address);
   const primaryType = place.type || place.category || "business";
   const placeId = `osm:${place.osm_type}:${place.osm_id}`;
@@ -263,10 +278,10 @@ export function mapNominatimPlace(
     address: place.display_name ?? province ?? "Adres bilgisi yok",
     province: province ?? "",
     phone: rawPhone,
-    internationalPhone: mobile ? `+${mobile}` : rawPhone,
+    internationalPhone: mobile ? `+${mobile}` : normalizedPhone ? `+${normalizedPhone}` : rawPhone,
     websiteUri: firstWebsite(tags),
     mapUri: `https://www.openstreetmap.org/${place.osm_type}/${place.osm_id}`,
-    businessStatus: isClosed(tags) ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
+    businessStatus: activity.closed ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
     primaryType,
     types: [place.category, place.type, `${place.category}:${place.type}`].filter(
       (value): value is string => Boolean(value && value !== "undefined:undefined"),
@@ -277,6 +292,11 @@ export function mapNominatimPlace(
     userRatingCount: 0,
     sector: context.sector,
     dataSource: "openstreetmap",
+    activityConfidence: activity.confidence,
+    activityReason: activity.reason,
+    openingHours: tags.opening_hours,
+    lastVerifiedAt: activity.lastVerifiedAt,
+    openedAt: activity.openedAt,
   };
 }
 
@@ -337,10 +357,23 @@ async function nominatimRequest(path: string, ttlMs: number): Promise<NominatimP
 }
 
 function firstPhone(tags: Record<string, string>) {
-  const values = [tags["contact:mobile"], tags.mobile, tags["contact:phone"], tags.phone]
+  const values = [
+    tags["contact:mobile"], tags.mobile,
+    tags["contact:whatsapp"], tags.whatsapp,
+    tags["contact:phone"], tags.phone,
+    tags["contact:telephone"], tags.telephone,
+    tags["contact:cell"], tags.cell,
+    tags["contact:gsm"], tags.gsm,
+  ]
     .filter((value): value is string => Boolean(value));
-  const candidates = values.flatMap((value) => value.split(/[;,]/).map((item) => item.trim())).filter(Boolean);
-  return candidates.find((value) => normalizeTurkishPhone(value)) ?? candidates[0] ?? null;
+  const candidates = values
+    .flatMap((value) => value.split(/[;,|]/))
+    .map((item) => item.trim().replace(/\s*(?:ext\.?|dahili|x)\s*\d+$/i, ""))
+    .filter(Boolean);
+  return candidates.find((value) => normalizeTurkishPhone(value)) ??
+    candidates.find((value) => normalizePhoneSearch(value)) ??
+    candidates[0] ??
+    null;
 }
 
 function firstWebsite(tags: Record<string, string>) {
@@ -396,8 +429,39 @@ function escapeOverpassRegex(value: string) {
   return escapeOverpassString(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isClosed(tags: Record<string, string>) {
-  return [tags.disused, tags.abandoned, tags.closed].some((value) => value === "yes");
+function activityFromTags(tags: Record<string, string>, elementTimestamp?: string) {
+  const openedAt = tags.opening_date || tags.start_date;
+  const closed = hasClosedLifecycle(tags);
+  const lastVerifiedAt = tags["check_date:opening_hours"] || tags.check_date || tags["survey:date"] || elementTimestamp;
+  const recentlyOpened = isOpenedWithinLastTwoYears(openedAt);
+  const confidence = closed ? "unknown" : recentlyOpened ? "strong" : tags.opening_hours ? "likely" : "unknown";
+  const reason = closed
+    ? "Açık veri kaydında kapanış veya terk edilme işareti var"
+    : recentlyOpened
+      ? `Açılış tarihi ${openedAt} · kapanış işareti yok`
+      : "Son iki yıllık doğrulanabilir açılış tarihi bulunamadı";
+  return { closed, confidence: confidence as PlaceDetails["activityConfidence"], reason, lastVerifiedAt, openedAt };
+}
+
+function hasClosedLifecycle(tags: Record<string, string>) {
+  const explicitClosed = ["disused", "abandoned", "closed", "demolished", "razed", "vacant"]
+    .some((key) => ["yes", "true", "closed"].includes(tags[key]?.toLowerCase()));
+  const lifecycleKey = Object.keys(tags).some((key) => /^(disused|abandoned|demolished|razed|was):/.test(key));
+  const inactiveValue = [tags.shop, tags.office, tags.craft, tags.amenity]
+    .some((value) => ["vacant", "closed", "disused", "abandoned"].includes(value?.toLowerCase()));
+  const openingHoursClosed = ["closed", "off"].includes(tags.opening_hours?.trim().toLowerCase());
+  return explicitClosed || lifecycleKey || inactiveValue || openingHoursClosed || endDateReached(tags.end_date);
+}
+
+function endDateReached(value?: string) {
+  if (!value) return false;
+  const match = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(value.trim());
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2] ?? "12");
+  const day = Number(match[3] ?? "31");
+  const end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+  return !Number.isNaN(end.getTime()) && end.getTime() < Date.now();
 }
 
 function humanize(value: string) {

@@ -41,6 +41,11 @@ export interface PlaceDetails {
   sector?: string;
   isDemo?: boolean;
   dataSource?: "openstreetmap" | "mock" | "legacy";
+  activityConfidence?: "strong" | "likely" | "unknown";
+  activityReason?: string;
+  openingHours?: string;
+  lastVerifiedAt?: string;
+  openedAt?: string;
 }
 
 export interface LeadRecord {

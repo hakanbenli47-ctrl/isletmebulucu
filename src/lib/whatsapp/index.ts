@@ -3,6 +3,7 @@ export function normalizeTurkishPhone(value: string | null | undefined): string 
   let digits = value.replace(/\D/g, "");
 
   if (digits.startsWith("0090")) digits = digits.slice(2);
+  if (/^9005\d{9}$/.test(digits)) digits = `90${digits.slice(3)}`;
   if (digits.startsWith("05")) digits = `9${digits}`;
   else if (digits.startsWith("5") && digits.length === 10) digits = `90${digits}`;
 

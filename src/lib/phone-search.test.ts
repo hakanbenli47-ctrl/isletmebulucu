@@ -9,6 +9,7 @@ describe("telefonla satış kaydı arama", () => {
   it("yaygın Türkiye telefon yazımlarını aynı numaraya dönüştürür", () => {
     expect(normalizePhoneSearch("0532 444 18 07")).toBe("905324441807");
     expect(normalizePhoneSearch("+90 (532) 444 18 07")).toBe("905324441807");
+    expect(normalizePhoneSearch("+90 (0) 532 444 18 07")).toBe("905324441807");
     expect(normalizePhoneSearch("0090 532 444 18 07")).toBe("905324441807");
   });
 

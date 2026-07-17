@@ -1,5 +1,6 @@
 import type { LeadQuality, LeadType, PlaceDetails } from "@/types";
 import { normalizeTurkishPhone } from "../whatsapp/index";
+import { isOpenedWithinLastTwoYears } from "./activity";
 import { assessPotential } from "./potential";
 import { assessSectorRelevance, normalizePlaceText } from "./relevance";
 import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "./website";
@@ -12,6 +13,7 @@ export interface QualificationDiagnostics {
   duplicatePlace: number;
   duplicateMobile: number;
   inactive: number;
+  notRecentlyOpened: number;
   wrongLocation: number;
   invalidMobile: number;
   independentWebsite: number;
@@ -33,7 +35,7 @@ interface QualificationOptions {
 }
 
 export function createQualificationDiagnostics(): QualificationDiagnostics {
-  return { total: 0, accepted: 0, duplicatePlace: 0, duplicateMobile: 0, inactive: 0, wrongLocation: 0, invalidMobile: 0, independentWebsite: 0, presenceMismatch: 0, irrelevantSector: 0, lowQuality: 0 };
+  return { total: 0, accepted: 0, duplicatePlace: 0, duplicateMobile: 0, inactive: 0, notRecentlyOpened: 0, wrongLocation: 0, invalidMobile: 0, independentWebsite: 0, presenceMismatch: 0, irrelevantSector: 0, lowQuality: 0 };
 }
 
 export function qualifySearchResults(places: PlaceDetails[], options: QualificationOptions) {
@@ -49,6 +51,10 @@ export function qualifySearchResults(places: PlaceDetails[], options: Qualificat
     }
     if (place.businessStatus !== "OPERATIONAL") {
       options.diagnostics.inactive += 1;
+      continue;
+    }
+    if (!isOpenedWithinLastTwoYears(place.openedAt)) {
+      options.diagnostics.notRecentlyOpened += 1;
       continue;
     }
     if (!matchesLocation(place, options.province)) {
@@ -99,6 +105,7 @@ export function formatQualificationSummary(diagnostics: QualificationDiagnostics
     [diagnostics.lowQuality, "aday kalite ölçütü yetersiz"],
     [diagnostics.independentWebsite + diagnostics.presenceMismatch, "dijital kanal ölçütüne uymadı"],
     [diagnostics.inactive, "faal görünmüyor"],
+    [diagnostics.notRecentlyOpened, "son iki yılda açıldığı doğrulanmadı"],
     [diagnostics.duplicatePlace + diagnostics.duplicateMobile, "tekrar kayıt"],
   ] as const;
   const rejected = reasons.filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`).join(", ");
@@ -114,5 +121,4 @@ function matchesPresence(uri: string | null | undefined, leadType: LeadType, pre
   if (presence === "instagram") return isInstagramProfile(uri);
   return socialProfileType(uri) === null;
 }
-
 

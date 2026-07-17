@@ -20,6 +20,8 @@ function place(overrides: Partial<PlaceDetails> = {}): PlaceDetails {
     rating: 4.4,
     userRatingCount: 30,
     sector: "Ambalaj malzemeleri toptancısı",
+    openedAt: "2025-01-01",
+    activityConfidence: "strong",
     ...overrides,
   };
 }
@@ -52,6 +54,15 @@ describe("açık veri işletme aday doğrulaması", () => {
     ]);
     expect(result.accepted).toHaveLength(0);
     expect(result.diagnostics).toMatchObject({ invalidMobile: 1, wrongLocation: 1 });
+  });
+
+  it("iki yıldan eski veya açılış tarihi bilinmeyen işletmeyi reddeder", () => {
+    const result = qualify([
+      place({ placeId: "old", openedAt: "2020-01-01" }),
+      place({ placeId: "unknown", openedAt: undefined }),
+    ]);
+    expect(result.accepted).toHaveLength(0);
+    expect(result.diagnostics.notRecentlyOpened).toBe(2);
   });
 
   it("aynı cep telefonuyla dönen şube tekrarını tek aday sayar", () => {

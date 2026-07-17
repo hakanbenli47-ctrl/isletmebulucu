@@ -64,12 +64,15 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 
 ## Açık veri araması ve kayıt davranışı
 
-- İşletme aramaları OpenStreetMap'in Overpass servisine, yalnızca telefon etiketi
-  bulunan sektör kayıtlarını getirecek şekilde yapılır. Nominatim yalnızca açık
+- İşletme aramaları OpenStreetMap'in Overpass servisine; yalnızca telefon etiketi
+  ve `start_date`/`opening_date` açılış tarihi bulunan sektör kayıtlarını getirecek şekilde yapılır. Nominatim yalnızca açık
   veri ayrıntısı yenilemesinde kullanılır.
 - Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
   sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
   kullanıcı aramasında en fazla 3 sektör/şehir çağrısı yapılır.
+- Yalnızca son iki takvim yılı içinde açıldığı açık veride doğrulanan, kapanmış/
+  terk edilmiş yaşam döngüsü etiketi bulunmayan ve WhatsApp'a uygun Türkiye cep
+  telefonu olan işletmeler kabul edilir. Açılış tarihi bilinmeyen kayıtlar elenir.
 - Uygun sonuçların ad, adres, telefon, web ve harita bilgileri `status = 'new'`
   olarak Supabase'e kaydedilir.
 - WhatsApp ilk mesajı açıldığında kayıt `contacted` durumuna geçer ve bir daha

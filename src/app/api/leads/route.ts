@@ -141,7 +141,7 @@ export async function GET(request: Request) {
     }
 
     const orderColumn = params.status === "due" ? "next_follow_up_at" : params.status === "new" ? "created_at" : "contacted_at";
-    async function runLeadQuery(columns: string) {
+    async function runLeadQuery(columns: string, hasCacheColumns: boolean) {
       let query = supabase
         .from("lead_records")
         .select(columns, { count: "exact" })
@@ -152,14 +152,18 @@ export async function GET(request: Request) {
       if (params.status === "pipeline") query = query.in("status", PIPELINE_STATUSES);
       else if (params.status === "due") query = query.in("status", PIPELINE_STATUSES).not("next_follow_up_at", "is", null).lte("next_follow_up_at", endOfToday());
       else query = query.eq("status", params.status);
+      if (params.status === "new") {
+        query = query.like("place_id", "osm:%");
+        if (hasCacheColumns) query = query.not("details_cache", "is", null);
+      }
       if (params.leadType) query = query.eq("lead_type", params.leadType);
       const since = sinceFor(params.period);
       if (since && params.status !== "due") query = query.gte("contacted_at", since);
       return query;
     }
 
-    let queryResult = await runLeadQuery(LEAD_SELECT);
-    if (cacheColumnsMissing(queryResult.error)) queryResult = await runLeadQuery(LEGACY_LEAD_SELECT);
+    let queryResult = await runLeadQuery(LEAD_SELECT, true);
+    if (cacheColumnsMissing(queryResult.error)) queryResult = await runLeadQuery(LEGACY_LEAD_SELECT, false);
     const data = queryResult.data as unknown as DbLeadRow[] | null;
     const { count, error } = queryResult;
     if (error) throw error;

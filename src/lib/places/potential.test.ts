@@ -28,9 +28,11 @@ describe("potansiyel aday kuralları", () => {
       userRatingCount: 0,
       sector: "Berber",
       websiteUri: null,
+      openedAt: "2025-01-01",
+      activityConfidence: "strong",
     }), "website");
     expect(result.eligible).toBe(true);
-    expect(result.reason).toContain("Açık veri");
+    expect(result.reason).toContain("açık veri");
   });
 
   it("web sitesi adayı için puan ve yorum alt sınırını uygular", () => {
@@ -82,4 +84,3 @@ describe("potansiyel aday kuralları", () => {
     expect(active.score).toBeGreaterThan(inactive.score);
   });
 });
-

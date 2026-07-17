@@ -12,6 +12,8 @@ import { createQualificationDiagnostics, formatQualificationSummary, qualifySear
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { normalizePhoneSearch } from "@/lib/phone-search";
+import { normalizeTurkishPhone } from "@/lib/whatsapp";
+import { isOpenedWithinLastTwoYears } from "@/lib/places/activity";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseSutunuEksikMi } from "@/lib/supabase/errors";
 import type { LeadRecord, LeadType, PlaceDetails } from "@/types";
@@ -25,7 +27,6 @@ const inputSchema = z.object({
 });
 
 const LEAD_SELECT = "id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at,data_source,details_cache,details_cached_at";
-const LEGACY_LEAD_SELECT = "id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at";
 
 async function allExistingLeadKeys(userId: string) {
   const supabase = await createSupabaseServerClient();
@@ -191,41 +192,10 @@ async function saveNewLeads(userId: string, leadType: LeadType, province: string
     details_cached_at: now,
   }));
 
-  let result = await supabase
+  const result = await supabase
     .from("lead_records")
     .upsert(rows, { onConflict: "user_id,place_id", ignoreDuplicates: true })
     .select(LEAD_SELECT);
-
-  if (cacheColumnsMissing(result.error)) {
-    const legacyRows = rows.map((row) => ({
-      user_id: row.user_id,
-      place_id: row.place_id,
-      phone_normalized: row.phone_normalized,
-      lead_type: row.lead_type,
-      status: row.status,
-      source_province: row.source_province,
-      source_sector: row.source_sector,
-    }));
-    result = await supabase
-      .from("lead_records")
-      .upsert(legacyRows, { onConflict: "user_id,place_id", ignoreDuplicates: true })
-      .select(LEGACY_LEAD_SELECT);
-  }
-
-  if (supabaseSutunuEksikMi(result.error, "phone_normalized")) {
-    const oldestRows = rows.map((row) => ({
-      user_id: row.user_id,
-      place_id: row.place_id,
-      lead_type: row.lead_type,
-      status: row.status,
-      source_province: row.source_province,
-      source_sector: row.source_sector,
-    }));
-    result = await supabase
-      .from("lead_records")
-      .upsert(oldestRows, { onConflict: "user_id,place_id", ignoreDuplicates: true })
-      .select(LEGACY_LEAD_SELECT);
-  }
 
   if (result.error) throw result.error;
   return (result.data ?? []) as unknown as Array<Omit<LeadRecord, "details">>;
@@ -257,6 +227,11 @@ async function cachedUncontactedLeads(
 
   return (data ?? []).flatMap((row) => {
     if (!isPlaceDetails(row.details_cache)) return [];
+    if (
+      row.details_cache.businessStatus !== "OPERATIONAL" ||
+      !isOpenedWithinLastTwoYears(row.details_cache.openedAt) ||
+      !normalizeTurkishPhone(row.details_cache.internationalPhone ?? row.details_cache.phone)
+    ) return [];
     const details = withPotential({
       ...row.details_cache,
       province: row.details_cache.province || row.source_province || "",
