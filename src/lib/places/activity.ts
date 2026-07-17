@@ -1,11 +1,18 @@
 export function isOpenedWithinLastTwoYears(value: string | null | undefined, now = new Date()) {
+  return openingRecencyStatus(value, now) === "recent";
+}
+
+export function openingRecencyStatus(
+  value: string | null | undefined,
+  now = new Date(),
+): "recent" | "old" | "unknown" {
   const opened = parseConservativeOpeningDate(value);
-  if (!opened) return false;
+  if (!opened || opened.getTime() > now.getTime()) return "unknown";
   const cutoff = new Date(now);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
   cutoff.setUTCHours(0, 0, 0, 0);
   const timestamp = opened.getTime();
-  return timestamp <= now.getTime() && timestamp >= cutoff.getTime();
+  return timestamp >= cutoff.getTime() ? "recent" : "old";
 }
 
 export function parseConservativeOpeningDate(value: string | null | undefined) {

@@ -1,6 +1,6 @@
 import type { LeadQuality, LeadType, PlaceDetails } from "@/types";
 import { normalizeTurkishPhone } from "../whatsapp/index";
-import { isOpenedWithinLastTwoYears } from "./activity";
+import { openingRecencyStatus } from "./activity";
 import { assessPotential } from "./potential";
 import { assessSectorRelevance, normalizePlaceText } from "./relevance";
 import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "./website";
@@ -14,6 +14,7 @@ export interface QualificationDiagnostics {
   duplicateMobile: number;
   inactive: number;
   notRecentlyOpened: number;
+  openingDateUnknown: number;
   wrongLocation: number;
   invalidMobile: number;
   independentWebsite: number;
@@ -35,7 +36,7 @@ interface QualificationOptions {
 }
 
 export function createQualificationDiagnostics(): QualificationDiagnostics {
-  return { total: 0, accepted: 0, duplicatePlace: 0, duplicateMobile: 0, inactive: 0, notRecentlyOpened: 0, wrongLocation: 0, invalidMobile: 0, independentWebsite: 0, presenceMismatch: 0, irrelevantSector: 0, lowQuality: 0 };
+  return { total: 0, accepted: 0, duplicatePlace: 0, duplicateMobile: 0, inactive: 0, notRecentlyOpened: 0, openingDateUnknown: 0, wrongLocation: 0, invalidMobile: 0, independentWebsite: 0, presenceMismatch: 0, irrelevantSector: 0, lowQuality: 0 };
 }
 
 export function qualifySearchResults(places: PlaceDetails[], options: QualificationOptions) {
@@ -53,7 +54,8 @@ export function qualifySearchResults(places: PlaceDetails[], options: Qualificat
       options.diagnostics.inactive += 1;
       continue;
     }
-    if (!isOpenedWithinLastTwoYears(place.openedAt)) {
+    const openingStatus = openingRecencyStatus(place.openedAt);
+    if (openingStatus === "old") {
       options.diagnostics.notRecentlyOpened += 1;
       continue;
     }
@@ -91,6 +93,7 @@ export function qualifySearchResults(places: PlaceDetails[], options: Qualificat
     options.seenPlaceIds.add(place.placeId);
     options.seenMobiles.add(mobile);
     options.diagnostics.accepted += 1;
+    if (openingStatus === "unknown") options.diagnostics.openingDateUnknown += 1;
     accepted.push(place);
   }
 
@@ -109,7 +112,10 @@ export function formatQualificationSummary(diagnostics: QualificationDiagnostics
     [diagnostics.duplicatePlace + diagnostics.duplicateMobile, "tekrar kayıt"],
   ] as const;
   const rejected = reasons.filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`).join(", ");
-  return rejected ? `${diagnostics.total} açık veri sonucu denetlendi; ${rejected} olduğu için elendi.` : `${diagnostics.total} açık veri sonucu denetlendi.`;
+  const acceptedNote = diagnostics.openingDateUnknown
+    ? ` ${diagnostics.openingDateUnknown} kabul edilen adayın açılış tarihi kayıtlı değil; faal kayıt ve geçerli mobil sinyaliyle yedek havuza alındı.`
+    : "";
+  return rejected ? `${diagnostics.total} açık veri sonucu denetlendi; ${rejected} olduğu için elendi.${acceptedNote}` : `${diagnostics.total} açık veri sonucu denetlendi.${acceptedNote}`;
 }
 
 function matchesLocation(place: PlaceDetails, province: string) {

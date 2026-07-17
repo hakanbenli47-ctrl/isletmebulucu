@@ -56,13 +56,14 @@ describe("açık veri işletme aday doğrulaması", () => {
     expect(result.diagnostics).toMatchObject({ invalidMobile: 1, wrongLocation: 1 });
   });
 
-  it("iki yıldan eski veya açılış tarihi bilinmeyen işletmeyi reddeder", () => {
+  it("iki yıldan eski işletmeyi reddeder, tarihi bilinmeyeni yedek aday olarak kabul eder", () => {
     const result = qualify([
       place({ placeId: "old", openedAt: "2020-01-01" }),
       place({ placeId: "unknown", openedAt: undefined }),
     ]);
-    expect(result.accepted).toHaveLength(0);
-    expect(result.diagnostics.notRecentlyOpened).toBe(2);
+    expect(result.accepted.map((item) => item.placeId)).toEqual(["unknown"]);
+    expect(result.diagnostics.notRecentlyOpened).toBe(1);
+    expect(result.diagnostics.openingDateUnknown).toBe(1);
   });
 
   it("aynı cep telefonuyla dönen şube tekrarını tek aday sayar", () => {

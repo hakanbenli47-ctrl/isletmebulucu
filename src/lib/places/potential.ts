@@ -1,7 +1,7 @@
 import type { LeadQuality, LeadType, PlaceDetails } from "@/types";
 import { normalizeTurkishPhone } from "../whatsapp/index";
 import { isInstagramProfile } from "./website";
-import { isOpenedWithinLastTwoYears } from "./activity";
+import { openingRecencyStatus } from "./activity";
 
 const ACCOUNTING_SECTOR_PRIORITY = [
   "Gıda toptancısı",
@@ -44,16 +44,19 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
   if (place.dataSource === "openstreetmap") {
     const websiteNeed = isInstagramProfile(place.websiteUri) ? 20 : place.websiteUri ? 5 : 18;
     const profilePoints = place.name && place.address ? 10 : 5;
+    const recency = openingRecencyStatus(place.openedAt);
+    const activityPoints = recency === "recent" ? 12 : place.activityConfidence === "likely" ? 6 : 0;
     const score = leadType === "website"
-      ? Math.min(100, 40 + 30 + websiteNeed + profilePoints)
-      : Math.min(100, 35 + (isPriorityAccountingSector(place) ? 55 : 40) + profilePoints);
-    const recentlyOpened = isOpenedWithinLastTwoYears(place.openedAt);
-    const eligible = contactable && recentlyOpened && place.activityConfidence === "strong";
+      ? Math.min(100, 25 + 20 + websiteNeed + profilePoints + activityPoints)
+      : Math.min(100, 25 + (isPriorityAccountingSector(place) ? 35 : 25) + profilePoints + activityPoints);
+    const eligible = contactable && recency !== "old" && (quality !== "selective" || place.activityConfidence !== "unknown");
     return {
       eligible,
       level: eligible && score >= 75 ? "high" : "standard",
       score,
-      reason: `${score}/100 potansiyel · ${place.openedAt ?? "açılış tarihi yok"} açılış · faal açık veri kaydı`,
+      reason: recency === "recent"
+        ? `${score}/100 potansiyel · ${place.openedAt} açılış · faal açık veri kaydı`
+        : `${score}/100 potansiyel · açılış tarihi kayıtlı değil · kapanış işareti yok`,
     };
   }
 

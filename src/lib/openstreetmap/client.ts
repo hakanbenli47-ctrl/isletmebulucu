@@ -1,9 +1,10 @@
 import "server-only";
 import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
-import { isOpenedWithinLastTwoYears } from "@/lib/places/activity";
+import { openingRecencyStatus } from "@/lib/places/activity";
 import type { PlaceDetails } from "@/types";
 
 const DEFAULT_API_URL = "https://nominatim.openstreetmap.org";
+const DEFAULT_OVERPASS_FAST_URL = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
 const DEFAULT_OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
 const DEFAULT_OVERPASS_FALLBACK_URL = "https://overpass.private.coffee/api/interpreter";
 const SEARCH_CACHE_MS = 30 * 60 * 1000;
@@ -172,25 +173,16 @@ function mapOverpassPlace(
 async function overpassSearch(sector: string, province: string): Promise<OverpassElement[]> {
   const selectors = SECTOR_SELECTORS[sector] ?? [`["name"~"${escapeOverpassRegex(sector)}",i]`];
   const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
-  const explicitWhatsAppFilter = '[~"^(contact:)?whatsapp$"~"."]';
-  const whatsAppLinkFilter = '[~"^(contact:)?(website|url)$"~"(wa\\.me|api\\.whatsapp\\.com|whatsapp:)",i]';
   const query = [
-    "[out:json][timeout:25];",
-    `area["boundary"="administrative"]["name"="${escapeOverpassString(province)}"]->.searchArea;`,
+    "[out:json][timeout:14];",
+    `area["boundary"="administrative"]["admin_level"="4"]["name"="${escapeOverpassString(province)}"]->.searchArea;`,
     "(",
-    ...selectors.flatMap((selector) => [
-      `nwr${selector}${explicitWhatsAppFilter}["start_date"](area.searchArea);`,
-      `nwr${selector}${explicitWhatsAppFilter}["opening_date"](area.searchArea);`,
-      `nwr${selector}${whatsAppLinkFilter}["start_date"](area.searchArea);`,
-      `nwr${selector}${whatsAppLinkFilter}["opening_date"](area.searchArea);`,
-      `nwr${selector}${phoneFilter}["start_date"](area.searchArea);`,
-      `nwr${selector}${phoneFilter}["opening_date"](area.searchArea);`,
-    ]),
+    ...selectors.map((selector) => `nwr${selector}${phoneFilter}(area.searchArea);`),
     ");",
-    "out center meta 120;",
+    "out center 100;",
   ].join("\n");
   const apiUrls = overpassApiUrls();
-  const cacheKey = `recent-openings-v4|${apiUrls.join("|")}|${province}|${sector}`;
+  const cacheKey = `contactable-businesses-v5|${apiUrls.join("|")}|${province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -198,7 +190,7 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
   let timedOut = false;
   for (const apiUrl of apiUrls) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 28_000);
+    const timeout = setTimeout(() => controller.abort(), 18_000);
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -237,7 +229,7 @@ function overpassApiUrls() {
     .split(/[\s,]+/)
     .map((value) => value.trim())
     .filter(Boolean);
-  return [...new Set([...configured, DEFAULT_OVERPASS_API_URL, DEFAULT_OVERPASS_FALLBACK_URL])];
+  return [...new Set([...configured, DEFAULT_OVERPASS_FAST_URL, DEFAULT_OVERPASS_FALLBACK_URL, DEFAULT_OVERPASS_API_URL])];
 }
 
 export async function getVisiblePlaceDetails(placeIds: string[]) {
@@ -433,13 +425,18 @@ function activityFromTags(tags: Record<string, string>, elementTimestamp?: strin
   const openedAt = tags.opening_date || tags.start_date;
   const closed = hasClosedLifecycle(tags);
   const lastVerifiedAt = tags["check_date:opening_hours"] || tags.check_date || tags["survey:date"] || elementTimestamp;
-  const recentlyOpened = isOpenedWithinLastTwoYears(openedAt);
-  const confidence = closed ? "unknown" : recentlyOpened ? "strong" : tags.opening_hours ? "likely" : "unknown";
+  const recency = openingRecencyStatus(openedAt);
+  const recentlyVerified = openingRecencyStatus(lastVerifiedAt) === "recent";
+  const confidence = closed ? "unknown" : recency === "recent" ? "strong" : tags.opening_hours || recentlyVerified ? "likely" : "unknown";
   const reason = closed
     ? "Açık veri kaydında kapanış veya terk edilme işareti var"
-    : recentlyOpened
+    : recency === "recent"
       ? `Açılış tarihi ${openedAt} · kapanış işareti yok`
-      : "Son iki yıllık doğrulanabilir açılış tarihi bulunamadı";
+      : recency === "old"
+        ? `Açılış tarihi ${openedAt} · son iki yıldan eski`
+        : tags.opening_hours || recentlyVerified
+          ? "Faal işletme sinyali var · açılış tarihi açık veride kayıtlı değil"
+          : "Kapanış işareti yok · açılış tarihi açık veride kayıtlı değil";
   return { closed, confidence: confidence as PlaceDetails["activityConfidence"], reason, lastVerifiedAt, openedAt };
 }
 

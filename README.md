@@ -29,7 +29,7 @@ ALLOWED_USER_EMAIL=eposta@adresiniz.com
 NOMINATIM_API_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=IsletmeBulucu/1.0
 OVERPASS_API_URL=https://overpass-api.de/api/interpreter
-OVERPASS_API_URLS=https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter
+OVERPASS_API_URLS=https://maps.mail.ru/osm/tools/overpass/api/interpreter,https://overpass.private.coffee/api/interpreter,https://overpass-api.de/api/interpreter
 PLACES_MAX_CALLS_PER_SEARCH=3
 NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
@@ -65,17 +65,18 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 
 ## Açık veri araması ve kayıt davranışı
 
-- İşletme aramaları OpenStreetMap'in Overpass servisine; yalnızca telefon etiketi
-  ve `start_date`/`opening_date` açılış tarihi bulunan sektör kayıtlarını getirecek şekilde yapılır. Nominatim yalnızca açık
+- İşletme aramaları OpenStreetMap'in Overpass servisine; telefon etiketi bulunan
+  sektör kayıtlarını getirecek şekilde yapılır. Nominatim yalnızca açık
   veri ayrıntısı yenilemesinde kullanılır.
 - Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
   sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
   kullanıcı aramasında en fazla 3 sektör/şehir çağrısı yapılır.
 - Bir Overpass sunucusu geçici hata verirse `OVERPASS_API_URLS` listesindeki sıradaki
   açık sunucu denenir; başarılı cevap önbelleğe alınarak gereksiz tekrar önlenir.
-- Yalnızca son iki takvim yılı içinde açıldığı açık veride doğrulanan, kapanmış/
-  terk edilmiş yaşam döngüsü etiketi bulunmayan ve BTK planına uygun Türkiye cep
-  telefonu olan işletmeler kabul edilir. Açılış tarihi bilinmeyen kayıtlar elenir.
+- Son iki takvim yılı içinde açıldığı doğrulanan işletmeler önce gösterilir. Açılış
+  tarihi açık veride bulunmayan ancak kapanış/terk edilme işareti taşımayan ve BTK
+  planına uygun Türkiye cep telefonu olan işletmeler yedek aday olarak kabul edilir.
+  Açılış tarihi açıkça iki yıldan eski olan kayıtlar elenir.
 - Uygun sonuçların ad, adres, telefon, web ve harita bilgileri `status = 'new'`
   olarak Supabase'e kaydedilir.
 - WhatsApp sohbet ekranının açıldığı kullanıcı tarafından onaylanınca kayıt

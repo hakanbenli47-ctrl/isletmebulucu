@@ -35,6 +35,18 @@ describe("potansiyel aday kuralları", () => {
     expect(result.reason).toContain("açık veri");
   });
 
+  it("açılış tarihi eksik açık veri adayını dengeli modda kabul eder", () => {
+    const candidate = place({
+      dataSource: "openstreetmap",
+      rating: null,
+      userRatingCount: 0,
+      openedAt: undefined,
+      activityConfidence: "unknown",
+    });
+    expect(assessPotential(candidate, "website", "recommended").eligible).toBe(true);
+    expect(assessPotential(candidate, "website", "selective").eligible).toBe(false);
+  });
+
   it("web sitesi adayı için puan ve yorum alt sınırını uygular", () => {
     expect(assessPotential(place({ rating: 3.9 }), "website").eligible).toBe(false);
     expect(assessPotential(place({ userRatingCount: 4 }), "website").eligible).toBe(false);

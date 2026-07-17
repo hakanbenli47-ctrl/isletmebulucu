@@ -13,7 +13,7 @@ import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
 import { normalizePhoneSearch } from "@/lib/phone-search";
 import { normalizeTurkishPhone } from "@/lib/whatsapp";
-import { isOpenedWithinLastTwoYears } from "@/lib/places/activity";
+import { openingRecencyStatus } from "@/lib/places/activity";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseSutunuEksikMi } from "@/lib/supabase/errors";
 import type { LeadRecord, LeadType, PlaceDetails } from "@/types";
@@ -169,7 +169,7 @@ export async function POST(request: Request) {
       .sort((a, b) => (detailOrder.get(a.place_id) ?? 999) - (detailOrder.get(b.place_id) ?? 999));
     const limited = found.length < target;
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
-    const resultLabel = `${found.length}${channel} doğrulanmış yeni işletme bulundu ve kaydedildi.`;
+    const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
     return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${formatQualificationSummary(diagnostics)}` });
   } catch (error) {
     return apiError(error);
@@ -229,7 +229,7 @@ async function cachedUncontactedLeads(
     if (!isPlaceDetails(row.details_cache)) return [];
     if (
       row.details_cache.businessStatus !== "OPERATIONAL" ||
-      !isOpenedWithinLastTwoYears(row.details_cache.openedAt) ||
+      openingRecencyStatus(row.details_cache.openedAt) === "old" ||
       !normalizeTurkishPhone(row.details_cache.internationalPhone ?? row.details_cache.phone)
     ) return [];
     const details = withPotential({
