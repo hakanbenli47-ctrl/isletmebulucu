@@ -11,7 +11,7 @@ function place(overrides: Partial<PlaceDetails> = {}): PlaceDetails {
     phone: "05321234567",
     internationalPhone: "+905321234567",
     websiteUri: null,
-    googleMapsUri: "https://maps.google.com",
+    mapUri: "https://www.openstreetmap.org",
     businessStatus: "OPERATIONAL",
     primaryType: "store",
     rating: 4.4,
@@ -21,6 +21,18 @@ function place(overrides: Partial<PlaceDetails> = {}): PlaceDetails {
 }
 
 describe("potansiyel aday kuralları", () => {
+  it("OpenStreetMap adayını puan ve yorum olmadan cep telefonu üzerinden kabul eder", () => {
+    const result = assessPotential(place({
+      dataSource: "openstreetmap",
+      rating: null,
+      userRatingCount: 0,
+      sector: "Berber",
+      websiteUri: null,
+    }), "website");
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toContain("Açık veri");
+  });
+
   it("web sitesi adayı için puan ve yorum alt sınırını uygular", () => {
     expect(assessPotential(place({ rating: 3.9 }), "website").eligible).toBe(false);
     expect(assessPotential(place({ userRatingCount: 4 }), "website").eligible).toBe(false);
@@ -70,3 +82,4 @@ describe("potansiyel aday kuralları", () => {
     expect(active.score).toBeGreaterThan(inactive.score);
   });
 });
+

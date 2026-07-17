@@ -12,7 +12,7 @@ function place(overrides: Partial<PlaceDetails> = {}): PlaceDetails {
     phone: "0532 123 45 67",
     internationalPhone: "+90 532 123 45 67",
     websiteUri: null,
-    googleMapsUri: "https://maps.google.com",
+    mapUri: "https://www.openstreetmap.org",
     businessStatus: "OPERATIONAL",
     primaryType: "wholesaler",
     types: ["wholesaler", "supplier"],
@@ -40,7 +40,7 @@ function qualify(places: PlaceDetails[]) {
   return { accepted, diagnostics };
 }
 
-describe("Google işletme aday doğrulaması", () => {
+describe("açık veri işletme aday doğrulaması", () => {
   it("faal, doğru ilde, cep telefonlu ve sektörle eşleşen işletmeyi kabul eder", () => {
     expect(qualify([place()]).accepted).toHaveLength(1);
   });

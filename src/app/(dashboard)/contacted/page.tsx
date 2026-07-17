@@ -23,7 +23,7 @@ import {
   buildWhatsAppWebUrl,
   formatTurkishMobilePhone,
 } from "@/lib/whatsapp";
-import { isInstagramProfile } from "@/lib/google-places/website";
+import { isInstagramProfile } from "@/lib/places/website";
 import { formatPhoneSearch, normalizePhoneSearch } from "@/lib/phone-search";
 import type { AppSettings, LeadRecord, LeadStatus } from "@/types";
 
@@ -680,7 +680,7 @@ function CrmLeadCard({
           </small>
         </div>
         <div className="crm-links">
-          <a href={lead.details.googleMapsUri} target="_blank" rel="noreferrer">
+          <a href={lead.details.mapUri} target="_blank" rel="noreferrer">
             Harita <ExternalLink size={13} />
           </a>
           <span>{lead.contact_count} mesaj adımı</span>

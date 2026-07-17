@@ -110,7 +110,9 @@ a { color: inherit; text-decoration: none; }
 .lead-actions .danger { color: var(--danger); }
 .lead-actions .instagram-button { color: #92246f; border-color: #e3c2da; }
 .more-actions { width: 100%; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
-.google-attribution { margin: 0; padding: 9px 18px; border-top: 1px solid var(--line); color: #7c8682; background: #fafbfb; font-size: 10px; text-align: right; }
+.data-attribution { margin: 0; padding: 9px 18px; border-top: 1px solid var(--line); color: #7c8682; background: #fafbfb; font-size: 10px; text-align: right; }
+.data-attribution a, .open-data-footer a { color: inherit; text-decoration: underline; }
+.open-data-footer { padding: 0 28px 18px; color: #7c8682; font-size: 11px; text-align: right; }
 .lead-table-wrap { overflow-x: auto; }
 .state, .empty-state { min-height: 260px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--line); background: white; color: var(--muted); font-size: 13px; }
 .empty-state { flex-direction: column; }
@@ -292,7 +294,8 @@ a { color: inherit; text-decoration: none; }
   .whatsapp-options .desktop-option { display: none; }
   .whatsapp-options .mobile-option { display: flex; }
   .more-actions button { flex: 1; justify-content: center; }
-  .google-attribution { margin-top: 9px; border: 1px solid var(--line); text-align: left; }
+  .data-attribution { margin-top: 9px; border: 1px solid var(--line); text-align: left; }
+  .open-data-footer { padding: 0 16px 82px; text-align: left; }
   .stats-line { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
   .filter-tabs button { flex: 1; }
   .settings-grid.numbers { grid-template-columns: 1fr 1fr; gap: 10px; }

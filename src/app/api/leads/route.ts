@@ -2,8 +2,8 @@ import { z } from "zod";
 import { apiError } from "@/lib/api-response";
 import { requireApiUser } from "@/lib/auth";
 import { isMockMode } from "@/lib/config";
-import { getVisiblePlaceDetails, searchPlaces } from "@/lib/google-places/client";
-import { orderPotentialPlaces, withPotential } from "@/lib/google-places/potential";
+import { getVisiblePlaceDetails } from "@/lib/openstreetmap/client";
+import { orderPotentialPlaces, withPotential } from "@/lib/places/potential";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockStore } from "@/lib/mock-data";
 import { normalizePhoneSearch, phoneMatchesSearch } from "@/lib/phone-search";
@@ -24,6 +24,10 @@ const querySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
   phone: z.string().trim().max(30).optional(),
 });
+
+const LEAD_SELECT = "id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at,data_source,details_cache,details_cached_at";
+const LEGACY_LEAD_SELECT = "id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at";
+type DbLeadRow = Omit<LeadRecord, "details">;
 
 function sinceFor(period: "today" | "week" | "all") {
   if (period === "all") return null;
@@ -73,64 +77,39 @@ export async function GET(request: Request) {
     const supabase = await createSupabaseServerClient();
     if (searchedPhone) {
       const statsPromise = realStats(user.id);
-      const { data: indexedRecords, error: indexedError } = await supabase
+      const cachedSchemaResult = await supabase
         .from("lead_records")
-        .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at")
+        .select(LEAD_SELECT)
         .eq("user_id", user.id)
         .eq("phone_normalized", searchedPhone);
+      const indexedResult = cacheColumnsMissing(cachedSchemaResult.error)
+        ? await supabase
+          .from("lead_records")
+          .select(LEGACY_LEAD_SELECT)
+          .eq("user_id", user.id)
+          .eq("phone_normalized", searchedPhone)
+        : cachedSchemaResult;
+      const indexedRecords = indexedResult.data as unknown as DbLeadRow[] | null;
+      const indexedError = indexedResult.error;
       const telefonIndeksiEksik = supabaseSutunuEksikMi(
         indexedError,
         "phone_normalized",
       );
       if (indexedError && !telefonIndeksiEksik) throw indexedError;
 
-      let records = telefonIndeksiEksik ? [] : indexedRecords ?? [];
+      const records = telefonIndeksiEksik ? [] : indexedRecords ?? [];
       let matchingPlaces: PlaceDetails[] = [];
       let warning: string | null = null;
 
       if (records.length) {
-        const detailBatch = await getVisiblePlaceDetails(
-          records.map((record) => record.place_id),
-        );
+        const detailBatch = await detailsForRecords(records);
         matchingPlaces = detailBatch.places.map((place) =>
           place.internationalPhone || place.phone
             ? place
             : { ...place, internationalPhone: `+${searchedPhone}` },
         );
         if (detailBatch.failedCount) {
-          warning = "İşletme kaydı bulundu; canlı Google detaylarının bir bölümü geçici olarak alınamadı.";
-        }
-      } else {
-        const places = await searchPlaces(`+${searchedPhone}`, "");
-        matchingPlaces = places.filter((place) =>
-          phoneMatchesSearch(
-            searchedPhone,
-            place.internationalPhone ?? place.phone,
-          ),
-        );
-
-        if (matchingPlaces.length) {
-          const { data, error } = await supabase
-            .from("lead_records")
-            .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at")
-            .eq("user_id", user.id)
-            .in("place_id", matchingPlaces.map((place) => place.placeId));
-          if (error) throw error;
-          records = data ?? [];
-
-          if (records.length && !telefonIndeksiEksik) {
-            const { error: indexError } = await supabase
-              .from("lead_records")
-              .update({ phone_normalized: searchedPhone })
-              .eq("user_id", user.id)
-              .in("place_id", records.map((record) => record.place_id));
-            if (
-              indexError &&
-              !supabaseSutunuEksikMi(indexError, "phone_normalized")
-            ) {
-              throw indexError;
-            }
-          }
+          warning = "İşletme kaydı bulundu; açık veri ayrıntılarının bir bölümü geçici olarak alınamadı.";
         }
       }
 
@@ -162,24 +141,30 @@ export async function GET(request: Request) {
     }
 
     const orderColumn = params.status === "due" ? "next_follow_up_at" : params.status === "new" ? "created_at" : "contacted_at";
-    let query = supabase
-      .from("lead_records")
-      .select("id,place_id,lead_type,status,contacted_at,next_follow_up_at,contact_count,notes,source_province,source_sector,created_at", { count: "exact" })
-      .eq("user_id", user.id)
-      .order(orderColumn, { ascending: params.status === "due", nullsFirst: false })
-      .range(from, from + params.pageSize - 1);
+    async function runLeadQuery(columns: string) {
+      let query = supabase
+        .from("lead_records")
+        .select(columns, { count: "exact" })
+        .eq("user_id", user.id)
+        .order(orderColumn, { ascending: params.status === "due", nullsFirst: false })
+        .range(from, from + params.pageSize - 1);
 
-    if (params.status === "pipeline") query = query.in("status", PIPELINE_STATUSES);
-    else if (params.status === "due") query = query.in("status", PIPELINE_STATUSES).not("next_follow_up_at", "is", null).lte("next_follow_up_at", endOfToday());
-    else query = query.eq("status", params.status);
-    if (params.leadType) query = query.eq("lead_type", params.leadType);
-    const since = sinceFor(params.period);
-    if (since && params.status !== "due") query = query.gte("contacted_at", since);
+      if (params.status === "pipeline") query = query.in("status", PIPELINE_STATUSES);
+      else if (params.status === "due") query = query.in("status", PIPELINE_STATUSES).not("next_follow_up_at", "is", null).lte("next_follow_up_at", endOfToday());
+      else query = query.eq("status", params.status);
+      if (params.leadType) query = query.eq("lead_type", params.leadType);
+      const since = sinceFor(params.period);
+      if (since && params.status !== "due") query = query.gte("contacted_at", since);
+      return query;
+    }
 
-    const { data, count, error } = await query;
+    let queryResult = await runLeadQuery(LEAD_SELECT);
+    if (cacheColumnsMissing(queryResult.error)) queryResult = await runLeadQuery(LEGACY_LEAD_SELECT);
+    const data = queryResult.data as unknown as DbLeadRow[] | null;
+    const { count, error } = queryResult;
     if (error) throw error;
     const [detailBatch, stats] = await Promise.all([
-      getVisiblePlaceDetails((data ?? []).map((record) => record.place_id)),
+      detailsForRecords(data ?? []),
       realStats(user.id),
     ]);
     const visiblePlaces = await enrichInstagramActivity(detailBatch.places);
@@ -194,8 +179,8 @@ export async function GET(request: Request) {
     }
     const warning = detailBatch.failedCount
       ? detailBatch.quotaLimited
-        ? `${detailBatch.failedCount} işletmenin canlı Google detayı kota nedeniyle gösterilemedi. Satış kayıtları ve notlarınız güvende.`
-        : `${detailBatch.failedCount} işletmenin canlı detayı geçici olarak alınamadı.`
+        ? `${detailBatch.failedCount} işletmenin açık veri ayrıntısı hız sınırı nedeniyle gösterilemedi. Kayıtlarınız ve notlarınız güvende.`
+        : `${detailBatch.failedCount} işletmenin açık veri ayrıntısı geçici olarak alınamadı.`
       : null;
     return Response.json({ leads, total: count ?? 0, stats, warning });
   } catch (error) {
@@ -216,21 +201,69 @@ function endOfToday() {
 }
 
 function unavailablePlace(placeId: string, province: string | null, sector: string | null): PlaceDetails {
+  const match = /^osm:(node|way|relation):(\d+)$/.exec(placeId);
   return {
     placeId,
-    name: "İşletme detayı kota yenilenince görünecek",
+    name: "İşletme detayı geçici olarak alınamadı",
     address: province ?? "Konum bilgisi bekleniyor",
     province: province ?? "",
     phone: null,
     internationalPhone: null,
     websiteUri: null,
-    googleMapsUri: `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(placeId)}`,
+    mapUri: match ? `https://www.openstreetmap.org/${match[1]}/${match[2]}` : "https://www.openstreetmap.org",
     businessStatus: "UNKNOWN",
     primaryType: sector ?? "business",
     sector: sector ?? undefined,
     rating: null,
     userRatingCount: 0,
+    dataSource: "openstreetmap",
   };
+}
+
+async function detailsForRecords(records: DbLeadRow[]) {
+  const cached = new Map<string, PlaceDetails>();
+  const missing: DbLeadRow[] = [];
+
+  for (const record of records) {
+    if (isPlaceDetails(record.details_cache)) {
+      cached.set(record.place_id, {
+        ...record.details_cache,
+        province: record.details_cache.province || record.source_province || "",
+        sector: record.details_cache.sector || record.source_sector || undefined,
+        dataSource: "openstreetmap",
+      });
+    } else {
+      missing.push(record);
+    }
+  }
+
+  const detailBatch = await getVisiblePlaceDetails(missing.map((record) => record.place_id));
+  const lookedUp = new Map(detailBatch.places.map((place) => [place.placeId, place]));
+  const places = records.map((record) => {
+    const placeId = record.place_id;
+    const detail = cached.get(placeId) ?? lookedUp.get(placeId);
+    if (!detail || detail.businessStatus === "UNKNOWN") {
+      return unavailablePlace(placeId, record.source_province, record.source_sector);
+    }
+    return {
+      ...detail,
+      province: detail.province || record.source_province || "",
+      sector: detail.sector || record.source_sector || undefined,
+    };
+  });
+  return { places, failedCount: detailBatch.failedCount, quotaLimited: detailBatch.quotaLimited };
+}
+
+function isPlaceDetails(value: unknown): value is PlaceDetails {
+  if (!value || typeof value !== "object") return false;
+  const place = value as Partial<PlaceDetails>;
+  return typeof place.placeId === "string" && typeof place.name === "string" && typeof place.address === "string";
+}
+
+function cacheColumnsMissing(error: unknown) {
+  return supabaseSutunuEksikMi(error, "details_cache") ||
+    supabaseSutunuEksikMi(error, "details_cached_at") ||
+    supabaseSutunuEksikMi(error, "data_source");
 }
 
 type StatRow = Pick<LeadRecord, "status" | "contacted_at" | "next_follow_up_at" | "lead_type" | "source_province" | "source_sector">;

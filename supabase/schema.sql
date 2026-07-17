@@ -13,6 +13,9 @@ create table public.lead_records (
   notes text,
   source_province text,
   source_sector text,
+  data_source text not null default 'legacy' check (data_source in ('openstreetmap', 'mock', 'legacy')),
+  details_cache jsonb,
+  details_cached_at timestamptz,
   last_activity_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -95,6 +98,7 @@ create table public.referral_partners (
 
 create index lead_records_user_status_idx on public.lead_records(user_id, status, lead_type);
 create index lead_records_user_phone_idx on public.lead_records(user_id, phone_normalized) where phone_normalized is not null;
+create index lead_records_uncontacted_cache_idx on public.lead_records(user_id, lead_type, created_at desc) where status = 'new' and details_cache is not null;
 create index lead_records_contacted_at_idx on public.lead_records(user_id, contacted_at desc);
 create index lead_records_follow_up_idx on public.lead_records(user_id, next_follow_up_at) where next_follow_up_at is not null;
 create index search_runs_user_created_idx on public.search_runs(user_id, created_at desc);

@@ -2,7 +2,7 @@ import type { LeadType, PlaceDetails } from "@/types";
 
 type Rule = { match: RegExp; types: string[]; keywords: string[] };
 
-// Google'ın döndürebildiği eski türler de doğrulamada tutulur; istek filtresinde yalnızca güncel Table A türleri kullanılır.
+// Eski işletme türleri de geçmiş kayıtların doğrulamasında tutulur.
 const RULES: Rule[] = [
   { match: /oto yikama|oto detay|arac kaplama/, types: ["car_wash", "car_repair"], keywords: ["oto", "detay", "kaplama", "wash"] },
   { match: /cam balkon|tente|tadilat|dekorasyon/, types: ["general_contractor", "home_improvement_store", "interior_designer"], keywords: ["cam", "balkon", "tente", "tadilat", "dekorasyon"] },
@@ -43,6 +43,15 @@ const RULES: Rule[] = [
 
 export function assessSectorRelevance(place: PlaceDetails, sector: string, leadType: LeadType) {
   const normalizedSector = normalize(sector);
+
+  if (
+    place.dataSource === "openstreetmap" &&
+    normalize(place.sector) === normalizedSector &&
+    place.businessStatus === "OPERATIONAL"
+  ) {
+    return { eligible: true, score: 10, reason: "OpenStreetMap arama kategorisi eşleşti" };
+  }
+
   const normalizedName = normalize(place.name);
   const normalizedLabel = normalize(place.typeLabel ?? "");
   const placeTypes = new Set(
@@ -58,12 +67,12 @@ export function assessSectorRelevance(place: PlaceDetails, sector: string, leadT
   const typeMatch = rule?.types.some((type) => placeTypes.has(type)) ?? false;
   const typeTextMatch = keywords.some((keyword) => [...placeTypes].some((type) => normalize(type).includes(keyword)));
   const score = (typeMatch ? 5 : 0) + (nameMatch ? 5 : 0) + (labelMatch ? 4 : 0) + (typeTextMatch ? 2 : 0);
-  // Ön muhasebede yalnızca "toptancı" gibi genel bir Google türü yeterli değildir; ikinci bir sektör sinyali aranır.
+  // Ön muhasebede yalnızca "toptancı" gibi genel bir tür yeterli değildir; ikinci bir sektör sinyali aranır.
   const threshold = leadType === "accounting" ? 8 : 5;
   return {
     eligible: score >= threshold,
     score,
-    reason: nameMatch && typeMatch ? "işletme adı ve türü eşleşti" : labelMatch && typeMatch ? "Google kategorisi ve türü eşleşti" : typeMatch ? "işletme türü eşleşti" : nameMatch ? "işletme adı eşleşti" : labelMatch ? "Google kategorisi eşleşti" : "sektör sinyali bulunamadı",
+    reason: nameMatch && typeMatch ? "işletme adı ve türü eşleşti" : labelMatch && typeMatch ? "açık veri kategorisi ve türü eşleşti" : typeMatch ? "işletme türü eşleşti" : nameMatch ? "işletme adı eşleşti" : labelMatch ? "açık veri kategorisi eşleşti" : "sektör sinyali bulunamadı",
   };
 }
 
@@ -107,3 +116,4 @@ function normalize(value: unknown) {
   if (typeof value !== "string") return "";
   return value.toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("ı", "i").replaceAll("ş", "s").replaceAll("ğ", "g").replaceAll("ç", "c").replaceAll("ö", "o").replaceAll("ü", "u").replace(/[^a-z0-9]+/g, " ").trim();
 }
+

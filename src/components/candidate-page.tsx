@@ -5,8 +5,8 @@ import { BriefcaseBusiness, Camera, MapPin, RotateCcw, Search, Undo2 } from "luc
 import { useLeads } from "@/hooks/use-leads";
 import LeadList from "@/components/lead-list";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
-import { assessPotential, orderPotentialPlaces } from "@/lib/google-places/potential";
-import { isInstagramProfile, socialProfileType } from "@/lib/google-places/website";
+import { assessPotential, orderPotentialPlaces } from "@/lib/places/potential";
+import { isInstagramProfile, socialProfileType } from "@/lib/places/website";
 import type { AppSettings, LeadQuality, LeadRecord, LeadStatus, LeadType } from "@/types";
 
 type PresenceFilter = "all" | "instagram" | "no_social";
@@ -106,7 +106,7 @@ export default function CandidatePage({ leadType, title, description }: { leadTy
         <label><span><Search size={15} />Aday kalitesi</span><select value={qualityFilter} onChange={(event) => setQualityFilter(event.target.value as LeadQuality)}><option value="recommended">Dengeli · önerilen</option><option value="selective">Seçici · güçlü profil</option><option value="broad">Geniş · daha çok aday</option></select></label>
         {leadType === "website" && <label><span><Camera size={15} />Dijital kanal</span><select value={presenceFilter} onChange={(event) => setPresenceFilter(event.target.value as PresenceFilter)}><option value="all">Tümü · site ihtiyacı olanlar</option><option value="instagram">Instagram var · site yok</option><option value="no_social">Sosyal profil görünmüyor</option></select></label>}
         {(provinceFilter || sectorFilter || qualityFilter !== "recommended" || presenceFilter !== "all") && <button className="clear-filters" onClick={() => { setProvinceFilter(""); setSectorFilter(""); setQualityFilter("recommended"); setPresenceFilter("all"); }}><RotateCcw size={14} />Filtreleri temizle</button>}
-        <p>{presenceFilter === "instagram" ? "Seçilen ilde doğrulanan, faal, WhatsApp'a uygun cep telefonlu, Instagram bağlantısı bulunan ve bağımsız sitesi olmayan işletmeler getirilir." : provinceFilter && sectorFilter ? "Seçilen şehir ve meslek için; konum, sektör, faaliyet, cep telefonu, puan ve yorum sinyalleri birlikte doğrulanır." : qualityFilter === "selective" ? "Yalnızca en güçlü puan, yorum, sektör ve iletişim sinyalleri bulunan işletmeler seçilir." : qualityFilter === "broad" ? "Daha az yorumlu işletmeler de değerlendirilir; şehir, sektör, faaliyet ve cep telefonu doğrulaması yine zorunludur." : "Faal durum, doğru il, WhatsApp'a uygun cep telefonu, sektör uyumu, puan ve yorum kalitesi zorunlu olarak denetlenir."}</p>
+        <p>{presenceFilter === "instagram" ? "Seçilen ilde doğrulanan, WhatsApp'a uygun cep telefonlu, Instagram bağlantısı bulunan ve bağımsız sitesi olmayan işletmeler getirilir." : provinceFilter && sectorFilter ? "Seçilen şehir ve meslek için açık veri konumu, sektör ve cep telefonu birlikte doğrulanır." : qualityFilter === "selective" ? "Sektör ve iletişim bilgisi en güçlü görünen açık veri kayıtları seçilir." : qualityFilter === "broad" ? "Daha geniş sektör eşleşmeleri değerlendirilir; şehir ve cep telefonu doğrulaması yine zorunludur." : "Doğru il, WhatsApp'a uygun cep telefonu ve sektör uyumu zorunlu olarak denetlenir."}</p>
       </div>
       {notice && <div className="notice success" role="status">{notice}</div>}
       {warning && <div className="notice warning" role="status">{warning}</div>}

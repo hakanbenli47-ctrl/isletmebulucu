@@ -12,3 +12,5 @@ describe("advanceSearchPosition", () => {
     expect(advanceSearchPosition({ provinceIndex: 80, sectorIndex: 3 }, 81, 4)).toEqual({ provinceIndex: 0, sectorIndex: 0 });
   });
 });
+
+

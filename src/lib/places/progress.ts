@@ -10,3 +10,5 @@ export function advanceSearchPosition(
   if (nextSector < sectorCount) return { provinceIndex: current.provinceIndex, sectorIndex: nextSector };
   return { provinceIndex: (current.provinceIndex + 1) % provinceCount, sectorIndex: 0 };
 }
+
+

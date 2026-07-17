@@ -1,5 +1,5 @@
 import { AuthError } from "@/lib/auth";
-import { GooglePlacesError } from "@/lib/google-places/client";
+import { OpenDataPlacesError } from "@/lib/openstreetmap/client";
 import { kullaniciyaUygunSupabaseHatasi } from "@/lib/supabase/errors";
 import { ZodError } from "zod";
 
@@ -10,7 +10,7 @@ export function apiError(error: unknown) {
   if (error instanceof ZodError) {
     return Response.json({ error: "Geçersiz istek.", details: error.issues }, { status: 400 });
   }
-  if (error instanceof GooglePlacesError) {
+  if (error instanceof OpenDataPlacesError) {
     return Response.json({ error: error.message }, { status: error.status });
   }
   const supabaseMesaji = kullaniciyaUygunSupabaseHatasi(error);

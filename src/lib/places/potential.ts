@@ -40,6 +40,20 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
   const reviews = place.userRatingCount;
   const contactable = place.businessStatus === "OPERATIONAL" && Boolean(normalizeTurkishPhone(place.internationalPhone ?? place.phone));
 
+  if (place.dataSource === "openstreetmap") {
+    const websiteNeed = isInstagramProfile(place.websiteUri) ? 20 : place.websiteUri ? 5 : 18;
+    const profilePoints = place.name && place.address ? 10 : 5;
+    const score = leadType === "website"
+      ? Math.min(100, 40 + 30 + websiteNeed + profilePoints)
+      : Math.min(100, 35 + (isPriorityAccountingSector(place) ? 55 : 40) + profilePoints);
+    return {
+      eligible: contactable,
+      level: contactable && score >= 75 ? "high" : "standard",
+      score,
+      reason: `${score}/100 potansiyel · Açık veri · cep telefonu ve sektör doğrulandı`,
+    };
+  }
+
   if (leadType === "website") {
     const eligibleByQuality = quality === "selective"
       ? rating >= 4.4 && reviews >= 10 && reviews <= 150
@@ -57,9 +71,7 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
     };
   }
 
-  const prioritySector = ACCOUNTING_SECTOR_PRIORITY.includes(
-    (place.sector ?? "") as (typeof ACCOUNTING_SECTOR_PRIORITY)[number],
-  ) || [place.primaryType, ...(place.types ?? [])].some((type) => ACCOUNTING_PRIMARY_TYPE_PRIORITY.includes(type));
+  const prioritySector = isPriorityAccountingSector(place);
   // B2B toptancılar son kullanıcı işletmeleri kadar yorum toplamaz; sektör uyumu daha güçlü sinyaldir.
   const eligibleByQuality = quality === "selective"
     ? rating >= 4 && reviews >= 5 && reviews <= 200
@@ -77,6 +89,12 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
       ? `${score}/100 potansiyel · ${place.sector ?? "stok/cari yoğun sektör"}`
       : `${score}/100 potansiyel · ${formatRating(rating)} puan · ${reviews} yorum`,
   };
+}
+
+function isPriorityAccountingSector(place: PlaceDetails) {
+  return ACCOUNTING_SECTOR_PRIORITY.includes(
+    (place.sector ?? "") as (typeof ACCOUNTING_SECTOR_PRIORITY)[number],
+  ) || [place.primaryType, ...(place.types ?? [])].some((type) => ACCOUNTING_PRIMARY_TYPE_PRIORITY.includes(type));
 }
 
 export function withPotential(place: PlaceDetails, leadType: LeadType, quality: LeadQuality = "recommended"): PlaceDetails {
@@ -150,3 +168,5 @@ function accountingScore(place: PlaceDetails, prioritySector: boolean) {
   const contactPoints = normalizeTurkishPhone(place.internationalPhone ?? place.phone) ? 15 : 0;
   return Math.min(100, sectorPoints + ratingPoints + reviewPoints + contactPoints);
 }
+
+

@@ -1,5 +1,5 @@
 import "server-only";
-import { instagramUsername } from "@/lib/google-places/website";
+import { instagramUsername } from "@/lib/places/website";
 import type { PlaceDetails } from "@/types";
 
 type ActivityResult = Pick<PlaceDetails, "instagramActivity" | "instagramLastPostAt" | "instagramFollowers">;

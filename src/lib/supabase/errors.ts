@@ -35,6 +35,14 @@ export function kullaniciyaUygunSupabaseHatasi(error: unknown) {
   const mesaj = String(error.message ?? "");
 
   if (
+    supabaseSutunuEksikMi(error, "details_cache") ||
+    supabaseSutunuEksikMi(error, "details_cached_at") ||
+    supabaseSutunuEksikMi(error, "data_source")
+  ) {
+    return "Açık veri önbelleği güncellemesi eksik. Supabase SQL Editor içinde supabase/migrations/20260717150000_openstreetmap_lead_cache.sql dosyasını çalıştırın.";
+  }
+
+  if (
     supabaseSutunuEksikMi(error, "phone_normalized") ||
     (kod === "23514" && mesaj.includes("lead_records_status_check"))
   ) {

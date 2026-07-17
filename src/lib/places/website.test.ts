@@ -19,3 +19,5 @@ describe("isIndependentWebsite", () => {
     expect(isInstagramProfile("https://ornekisletme.com.tr")).toBe(false);
   });
 });
+
+

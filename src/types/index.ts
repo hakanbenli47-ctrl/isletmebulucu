@@ -24,7 +24,7 @@ export interface PlaceDetails {
   phone: string | null;
   internationalPhone: string | null;
   websiteUri: string | null;
-  googleMapsUri: string;
+  mapUri: string;
   businessStatus: string;
   primaryType: string;
   types?: string[];
@@ -40,6 +40,7 @@ export interface PlaceDetails {
   potentialReason?: string;
   sector?: string;
   isDemo?: boolean;
+  dataSource?: "openstreetmap" | "mock" | "legacy";
 }
 
 export interface LeadRecord {
@@ -54,6 +55,9 @@ export interface LeadRecord {
   source_province: string | null;
   source_sector: string | null;
   created_at: string;
+  data_source?: "openstreetmap" | "mock" | "legacy";
+  details_cache?: PlaceDetails | null;
+  details_cached_at?: string | null;
   details: PlaceDetails;
 }
 

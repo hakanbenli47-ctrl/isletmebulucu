@@ -96,13 +96,13 @@ export function formatQualificationSummary(diagnostics: QualificationDiagnostics
     [diagnostics.invalidMobile, "WhatsApp'a uygun cep telefonu yok"],
     [diagnostics.wrongLocation, "il/ülke doğrulanmadı"],
     [diagnostics.irrelevantSector, "sektör eşleşmedi"],
-    [diagnostics.lowQuality, "puan veya yorum kalitesi yetersiz"],
+    [diagnostics.lowQuality, "aday kalite ölçütü yetersiz"],
     [diagnostics.independentWebsite + diagnostics.presenceMismatch, "dijital kanal ölçütüne uymadı"],
     [diagnostics.inactive, "faal görünmüyor"],
     [diagnostics.duplicatePlace + diagnostics.duplicateMobile, "tekrar kayıt"],
   ] as const;
   const rejected = reasons.filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`).join(", ");
-  return rejected ? `${diagnostics.total} Google sonucu denetlendi; ${rejected} olduğu için elendi.` : `${diagnostics.total} Google sonucu denetlendi.`;
+  return rejected ? `${diagnostics.total} açık veri sonucu denetlendi; ${rejected} olduğu için elendi.` : `${diagnostics.total} açık veri sonucu denetlendi.`;
 }
 
 function matchesLocation(place: PlaceDetails, province: string) {
@@ -114,3 +114,5 @@ function matchesPresence(uri: string | null | undefined, leadType: LeadType, pre
   if (presence === "instagram") return isInstagramProfile(uri);
   return socialProfileType(uri) === null;
 }
+
+

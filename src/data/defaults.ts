@@ -6,9 +6,9 @@ export const FIRST_CONTACT_MESSAGE = "Merhaba, iyi çalışmalar.";
 // Bu metinler ilk selamdan sonra yalnızca işletme cevap verdiğinde açılır.
 export const DEFAULT_WEBSITE_MESSAGE = `Teşekkür ederim. Sitemix olarak işletmeler için mobil uyumlu, telefon, WhatsApp ve harita bağlantılı web siteleri hazırlıyoruz.
 
-Google işletme profilinizde bağımsız bir web sitesi görünmediği için yazdım. Uygun olursa işletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşabilirim. Görmek ister misiniz?`;
+Açık işletme kaydınızda bağımsız bir web sitesi görünmediği için yazdım. Uygun olursa işletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşabilirim. Görmek ister misiniz?`;
 
-export const DEFAULT_INSTAGRAM_MESSAGE = `Teşekkür ederim. Instagram'daki çalışmalarınızı müşterilerinizin daha düzenli inceleyebileceği, Google'da bulunabilen ve doğrudan WhatsApp'tan ulaşabilecekleri bağımsız bir web sitesinde toplayabiliyoruz.
+export const DEFAULT_INSTAGRAM_MESSAGE = `Teşekkür ederim. Instagram'daki çalışmalarınızı müşterilerinizin daha düzenli inceleyebileceği, arama motorlarında bulunabilen ve doğrudan WhatsApp'tan ulaşabilecekleri bağımsız bir web sitesinde toplayabiliyoruz.
 
 Uygun olursa işletmenize özel ücretsiz bir örnek ana sayfa hazırlayıp paylaşabilirim. Görmek ister misiniz?`;
 
