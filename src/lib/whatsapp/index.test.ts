@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, formatTurkishMobilePhone, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
+import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl, extractTurkishMobilePhones, formatTurkishMobilePhone, normalizeTurkishPhone, personalizeWhatsAppMessage } from "./index";
 
 describe("normalizeTurkishPhone", () => {
   it.each([
@@ -14,6 +14,19 @@ describe("normalizeTurkishPhone", () => {
 
   it.each(["123", "0212 123 45 67", "", null])("geçersiz numarayı reddeder", (input) => {
     expect(normalizeTurkishPhone(input)).toBeNull();
+  });
+
+  it.each(["0500 123 45 67", "0512 123 45 67", "0556 123 45 67", "0570 123 45 67"])("BTK mobil abone bloğu olmayan %s numarasını reddeder", (input) => {
+    expect(normalizeTurkishPhone(input)).toBeNull();
+  });
+
+  it.each(["0501 123 45 67", "0505 123 45 67", "0510 123 45 67", "0516 123 45 67", "0549 123 45 67", "0559 123 45 67", "0561 123 45 67"])("BTK planındaki %s mobil numarasını kabul eder", (input) => {
+    expect(normalizeTurkishPhone(input)).not.toBeNull();
+  });
+
+  it("WhatsApp bağlantısındaki telefonu ve çoklu numaraları çıkarır", () => {
+    expect(extractTurkishMobilePhones("https://wa.me/905321234567?text=Merhaba")).toEqual(["905321234567"]);
+    expect(extractTurkishMobilePhones("0532 123 45 67; 0541 765 43 21")).toEqual(["905321234567", "905417654321"]);
   });
 });
 

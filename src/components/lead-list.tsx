@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Archive, Ban, Camera, ChevronDown, CircleOff, ExternalLink, Laptop, MessageCircle, Smartphone, Star, UserRoundCheck } from "lucide-react";
 import { FIRST_CONTACT_MESSAGE } from "@/data/defaults";
 import { buildWhatsAppDesktopUrl, buildWhatsAppUrl, buildWhatsAppWebUrl } from "@/lib/whatsapp";
@@ -8,6 +9,7 @@ import { formatPhoneSearch } from "@/lib/phone-search";
 import type { LeadRecord, LeadStatus, LeadType } from "@/types";
 
 export default function LeadList({ leads, leadType, loading, onContact, onStatus, contacted = false }: { leads: LeadRecord[]; leadType?: LeadType; loading: boolean; onContact?: (lead: LeadRecord) => void; onStatus: (lead: LeadRecord, status: LeadStatus) => void; contacted?: boolean }) {
+  const [checkingLeadId, setCheckingLeadId] = useState<string | null>(null);
   if (loading) return <div className="state"><span className="spinner" />İşletmeler yükleniyor…</div>;
   if (!leads.length) return <div className="empty-state"><strong>Gösterilecek işletme yok</strong><span>{contacted ? "Bu filtrede iletişim kaydı bulunamadı." : "Yeni bir tarama başlatarak aday listenizi oluşturun."}</span></div>;
   return (
@@ -24,13 +26,13 @@ export default function LeadList({ leads, leadType, loading, onContact, onStatus
           const desktopUrl = buildWhatsAppDesktopUrl(phone, FIRST_CONTACT_MESSAGE);
           const webUrl = buildWhatsAppWebUrl(phone, FIRST_CONTACT_MESSAGE);
           return <article className="lead-row" role="row" key={lead.place_id}>
-            <div className="lead-name"><div><strong>{place.name}</strong><div className="badges">{place.isDemo && <span className="badge demo">Demo veri</span>}{place.potentialScore !== undefined && <span className={`badge ${place.potentialLevel === "high" ? "potential" : "score"}`}>{place.potentialScore}/100 potansiyel</span>}{place.openedAt && <span className="badge activity">Son 2 yılda açıldı · {place.openedAt}</span>}{leadType === "website" && <span className={`badge ${hasInstagram ? "instagram" : "warning"}`}>{hasInstagram ? "Instagram var · site yok" : "Web sitesi görünmüyor"}</span>}{hasInstagram && <span className={`badge instagram-${place.instagramActivity ?? "unverified"}`}>{instagramActivityLabel(place.instagramActivity)}</span>}</div>{place.rating !== null ? <span className="rating-line"><Star size={13} fill="currentColor" />{place.rating.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}<span>· {place.userRatingCount} yorum</span></span> : <span className="rating-line">Faal açık veri kaydı · doğrulanmış açılış tarihi</span>}</div><a className="maps-source" href={place.mapUri} target="_blank" rel="noreferrer">{isOpenData ? "OpenStreetMap" : "Harita"} <ExternalLink size={13} /></a></div>
+            <div className="lead-name"><div><strong>{place.name}</strong><div className="badges">{place.isDemo && <span className="badge demo">Demo veri</span>}{place.potentialScore !== undefined && <span className={`badge ${place.potentialLevel === "high" ? "potential" : "score"}`}>{place.potentialScore}/100 potansiyel</span>}{place.openedAt && <span className="badge activity">Son 2 yılda açıldı · {place.openedAt}</span>}<span className={`badge ${isExplicitWhatsApp(place.whatsappEvidence) ? "whatsapp-explicit" : "whatsapp-pending"}`}>{whatsappEvidenceLabel(place.whatsappEvidence)}</span>{leadType === "website" && <span className={`badge ${hasInstagram ? "instagram" : "warning"}`}>{hasInstagram ? "Instagram var · site yok" : "Web sitesi görünmüyor"}</span>}{hasInstagram && <span className={`badge instagram-${place.instagramActivity ?? "unverified"}`}>{instagramActivityLabel(place.instagramActivity)}</span>}</div>{place.rating !== null ? <span className="rating-line"><Star size={13} fill="currentColor" />{place.rating.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}<span>· {place.userRatingCount} yorum</span></span> : <span className="rating-line">Faal açık veri kaydı · doğrulanmış açılış tarihi</span>}</div><a className="maps-source" href={place.mapUri} target="_blank" rel="noreferrer">{isOpenData ? "OpenStreetMap" : "Harita"} <ExternalLink size={13} /></a></div>
             <div className="lead-location"><strong>{place.province || "Şehir bilgisi yok"}</strong><span>{place.address}</span><small>{formatType(place.sector ?? place.primaryType)}</small>{place.potentialReason && <small className="potential-reason">{place.potentialReason}</small>}</div>
-            <div className="lead-contact"><a href={phone ? `tel:${phone}` : undefined}>{displayPhone || "Telefon yok"}</a>{place.activityReason && <small>{place.activityReason}</small>}{hasInstagram ? <a className="instagram-source" href={place.websiteUri!} target="_blank" rel="noreferrer"><Camera size={13} />Instagram profilini aç</a> : <span>{leadType === "website" ? "Açık veri kaydında bağımsız site yok" : place.websiteUri ? "Web sitesi mevcut" : "Web sitesi bilgisi yok"}</span>}</div>
+            <div className="lead-contact"><a href={phone ? `tel:${phone}` : undefined}>{displayPhone || "Telefon yok"}</a>{place.whatsappReason && <small className="whatsapp-reason">{place.whatsappReason}</small>}{place.activityReason && <small>{place.activityReason}</small>}{hasInstagram ? <a className="instagram-source" href={place.websiteUri!} target="_blank" rel="noreferrer"><Camera size={13} />Instagram profilini aç</a> : <span>{leadType === "website" ? "Açık veri kaydında bağımsız site yok" : place.websiteUri ? "Web sitesi mevcut" : "Web sitesi bilgisi yok"}</span>}</div>
             {contacted && <div className="contact-date"><strong>{lead.lead_type === "website" ? "Web sitesi" : "Ön muhasebe"}</strong><span>{lead.contacted_at ? new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.contacted_at)) : "—"}</span></div>}
             <div className="lead-actions">
               {!contacted && (whatsappUrl && desktopUrl && webUrl
-                ? <details className="whatsapp-menu"><summary className="whatsapp-button"><MessageCircle size={16} />1. mesaj<ChevronDown size={13} /></summary><div className="whatsapp-options"><a className="desktop-option" href={desktopUrl} onClick={() => onContact?.(lead)}><Laptop size={16} /><span><strong>Masaüstü uygulaması</strong><small>Yalnızca “Merhaba, iyi çalışmalar.”</small></span></a><a className="desktop-option" href={webUrl} target="isletme-bulucu-whatsapp" onClick={() => onContact?.(lead)}><MessageCircle size={16} /><span><strong>WhatsApp Web</strong><small>Yalnızca kısa selamı açar</small></span></a><a className="mobile-option" href={whatsappUrl} onClick={() => onContact?.(lead)}><Smartphone size={16} /><span><strong>WhatsApp’ta aç</strong><small>Yalnızca kısa selamı açar</small></span></a></div></details>
+                ? <details className="whatsapp-menu"><summary className="whatsapp-button"><MessageCircle size={16} />WhatsApp kontrol<ChevronDown size={13} /></summary><div className="whatsapp-options"><a className="desktop-option" href={desktopUrl} onClick={() => setCheckingLeadId(lead.place_id)}><Laptop size={16} /><span><strong>Masaüstünde kontrol et</strong><small>Sohbet açılırsa aşağıdan onaylayın</small></span></a><a className="desktop-option" href={webUrl} target="isletme-bulucu-whatsapp" onClick={() => setCheckingLeadId(lead.place_id)}><MessageCircle size={16} /><span><strong>WhatsApp Web’de kontrol et</strong><small>Sohbet açılırsa aşağıdan onaylayın</small></span></a><a className="mobile-option" href={whatsappUrl} onClick={() => setCheckingLeadId(lead.place_id)}><Smartphone size={16} /><span><strong>WhatsApp’ta kontrol et</strong><small>Sohbet açılırsa aşağıdan onaylayın</small></span></a></div></details>
                 : <button className="whatsapp-button" disabled title="Geçerli cep telefonu yok"><MessageCircle size={16} />WhatsApp</button>)}
               <a className="action-button" href={place.mapUri} target="_blank" rel="noreferrer"><ExternalLink size={15} />Harita</a>
               {hasInstagram && <a className="action-button instagram-button" href={place.websiteUri!} target="_blank" rel="noreferrer"><Camera size={15} />Instagram</a>}
@@ -41,6 +43,7 @@ export default function LeadList({ leads, leadType, loading, onContact, onStatus
                 <button onClick={() => onStatus(lead, "archived")}><Archive size={15} />Arşivle</button>
                 {contacted && <button onClick={() => onStatus(lead, "new")}>Adaylara Geri Taşı</button>}
               </div>
+              {!contacted && checkingLeadId === lead.place_id && <div className="whatsapp-check-result" role="status"><strong>Sohbet ekranı açıldı mı?</strong><button className="whatsapp-confirm" onClick={() => { setCheckingLeadId(null); onContact?.(lead); }}><MessageCircle size={14} />Evet, mesaj ekranı açıldı</button><button className="whatsapp-reject" onClick={() => { setCheckingLeadId(null); onStatus(lead, "no_whatsapp"); }}><CircleOff size={14} />Hayır, WhatsApp yok</button></div>}
             </div>
           </article>;
         })}
@@ -55,4 +58,12 @@ function instagramActivityLabel(activity: LeadRecord["details"]["instagramActivi
   if (activity === "active") return "Instagram aktif · son 90 gün";
   if (activity === "inactive") return "Instagram güncel görünmüyor";
   return "Instagram etkinliği doğrulanmadı";
+}
+
+function isExplicitWhatsApp(evidence: LeadRecord["details"]["whatsappEvidence"]) {
+  return evidence === "explicit_tag" || evidence === "explicit_link";
+}
+
+function whatsappEvidenceLabel(evidence: LeadRecord["details"]["whatsappEvidence"]) {
+  return isExplicitWhatsApp(evidence) ? "WhatsApp açık veride işaretli" : "WhatsApp canlı kontrol bekliyor";
 }

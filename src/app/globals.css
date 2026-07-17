@@ -87,12 +87,15 @@ a { color: inherit; text-decoration: none; }
 .badge.instagram-inactive { background: #fff0e2; color: #955600; }
 .badge.instagram-unverified { background: #f0f1f2; color: #68716e; }
 .badge.activity { background: #ddf5e7; color: #087044; }
+.badge.whatsapp-explicit { background: #d8f7e6; color: #087044; }
+.badge.whatsapp-pending { background: #fff2d6; color: #8a5708; }
 .rating-line { display: flex; align-items: center; gap: 4px; margin-top: 8px; color: #a86400; font-size: 11px; font-weight: 800; }
 .rating-line span { color: var(--muted); font-weight: 550; }
 .lead-location strong, .lead-contact a, .contact-date strong { font-size: 12px; }
 .lead-location span, .lead-contact span, .contact-date span { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .lead-location small { width: fit-content; color: var(--green-dark); font-size: 10px; font-weight: 700; }
 .lead-location .potential-reason { color: #6d7773; font-weight: 500; }
+.lead-contact .whatsapp-reason { color: #53645c; font-weight: 700; }
 .instagram-source { width: fit-content; display: inline-flex; align-items: center; gap: 5px; color: #9b2b78; font-size: 11px; font-weight: 750; }
 .lead-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .lead-actions button, .action-button { min-height: 34px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: white; color: #47514e; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
@@ -111,6 +114,10 @@ a { color: inherit; text-decoration: none; }
 .lead-actions .danger { color: var(--danger); }
 .lead-actions .instagram-button { color: #92246f; border-color: #e3c2da; }
 .more-actions { width: 100%; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.whatsapp-check-result { width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 6px; padding: 8px; border: 1px solid #b9ddc9; border-radius: 7px; background: #eef9f3; }
+.whatsapp-check-result strong { margin-right: auto; color: var(--green-dark); font-size: 10px; }
+.lead-actions .whatsapp-check-result .whatsapp-confirm { color: white; border-color: var(--wa); background: var(--wa); }
+.lead-actions .whatsapp-check-result .whatsapp-reject { color: var(--danger); border-color: #e2b9b6; background: white; }
 .data-attribution { margin: 0; padding: 9px 18px; border-top: 1px solid var(--line); color: #7c8682; background: #fafbfb; font-size: 10px; text-align: right; }
 .data-attribution a, .open-data-footer a { color: inherit; text-decoration: underline; }
 .open-data-footer { padding: 0 28px 18px; color: #7c8682; font-size: 11px; text-align: right; }
@@ -295,6 +302,9 @@ a { color: inherit; text-decoration: none; }
   .whatsapp-options .desktop-option { display: none; }
   .whatsapp-options .mobile-option { display: flex; }
   .more-actions button { flex: 1; justify-content: center; }
+  .whatsapp-check-result { align-items: stretch; flex-direction: column; }
+  .whatsapp-check-result strong { margin: 0 0 2px; }
+  .whatsapp-check-result button { justify-content: center; }
   .data-attribution { margin-top: 9px; border: 1px solid var(--line); text-align: left; }
   .open-data-footer { padding: 0 16px 82px; text-align: left; }
   .stats-line { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }

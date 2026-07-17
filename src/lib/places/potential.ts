@@ -112,6 +112,8 @@ export function orderPotentialPlaces(places: PlaceDetails[], leadType: LeadType,
   return places
     .map((place) => withPotential(place, leadType, quality))
     .sort((a, b) => {
+      const whatsappDifference = whatsappEvidenceRank(a.whatsappEvidence) - whatsappEvidenceRank(b.whatsappEvidence);
+      if (whatsappDifference !== 0) return whatsappDifference;
       if (a.potentialLevel !== b.potentialLevel) return a.potentialLevel === "high" ? -1 : 1;
       if (a.instagramActivity !== b.instagramActivity) return instagramActivityRank(a.instagramActivity) - instagramActivityRank(b.instagramActivity);
       if (leadType === "accounting") {
@@ -124,6 +126,12 @@ export function orderPotentialPlaces(places: PlaceDetails[], leadType: LeadType,
       if ((b.rating ?? 0) !== (a.rating ?? 0)) return (b.rating ?? 0) - (a.rating ?? 0);
       return b.userRatingCount - a.userRatingCount;
     });
+}
+
+function whatsappEvidenceRank(evidence?: PlaceDetails["whatsappEvidence"]) {
+  if (evidence === "explicit_tag" || evidence === "explicit_link") return 0;
+  if (evidence === "mobile_only") return 1;
+  return 2;
 }
 
 function sectorRank(sector?: string) {
@@ -171,4 +179,3 @@ function accountingScore(place: PlaceDetails, prioritySector: boolean) {
   const contactPoints = normalizeTurkishPhone(place.internationalPhone ?? place.phone) ? 15 : 0;
   return Math.min(100, sectorPoints + ratingPoints + reviewPoints + contactPoints);
 }
-

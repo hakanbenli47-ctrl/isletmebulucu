@@ -78,6 +78,14 @@ describe("potansiyel aday kuralları", () => {
     expect(ordered.map((item) => item.placeId)).toEqual(["öncelikli", "standart", "çok-yorum"]);
   });
 
+  it("açık WhatsApp sinyali olan adayı yalnız mobil numarası olandan önce sıralar", () => {
+    const ordered = orderPotentialPlaces([
+      place({ placeId: "mobil", whatsappEvidence: "mobile_only" }),
+      place({ placeId: "whatsapp", whatsappEvidence: "explicit_tag" }),
+    ], "website");
+    expect(ordered.map((item) => item.placeId)).toEqual(["whatsapp", "mobil"]);
+  });
+
   it("yakın zamanda paylaşım yapan Instagram adayına etkinlik puanı verir", () => {
     const active = assessPotential(place({ websiteUri: "https://instagram.com/ornek", instagramActivity: "active" }), "website");
     const inactive = assessPotential(place({ websiteUri: "https://instagram.com/ornek", instagramActivity: "inactive" }), "website");

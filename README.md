@@ -29,6 +29,7 @@ ALLOWED_USER_EMAIL=eposta@adresiniz.com
 NOMINATIM_API_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=IsletmeBulucu/1.0
 OVERPASS_API_URL=https://overpass-api.de/api/interpreter
+OVERPASS_API_URLS=https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter
 PLACES_MAX_CALLS_PER_SEARCH=3
 NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
@@ -70,17 +71,24 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 - Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
   sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
   kullanıcı aramasında en fazla 3 sektör/şehir çağrısı yapılır.
+- Bir Overpass sunucusu geçici hata verirse `OVERPASS_API_URLS` listesindeki sıradaki
+  açık sunucu denenir; başarılı cevap önbelleğe alınarak gereksiz tekrar önlenir.
 - Yalnızca son iki takvim yılı içinde açıldığı açık veride doğrulanan, kapanmış/
-  terk edilmiş yaşam döngüsü etiketi bulunmayan ve WhatsApp'a uygun Türkiye cep
+  terk edilmiş yaşam döngüsü etiketi bulunmayan ve BTK planına uygun Türkiye cep
   telefonu olan işletmeler kabul edilir. Açılış tarihi bilinmeyen kayıtlar elenir.
 - Uygun sonuçların ad, adres, telefon, web ve harita bilgileri `status = 'new'`
   olarak Supabase'e kaydedilir.
-- WhatsApp ilk mesajı açıldığında kayıt `contacted` durumuna geçer ve bir daha
-  yeni aday/yedek aday olarak gösterilmez.
+- WhatsApp sohbet ekranının açıldığı kullanıcı tarafından onaylanınca kayıt
+  `contacted` durumuna geçer ve bir daha yeni aday/yedek aday olarak gösterilmez.
 - Nominatim geçici hata verirse yalnızca daha önce kaydedilmiş, `status = 'new'`
   olan ve mesaj gönderilmemiş adaylar gösterilir.
 - Aynı OpenStreetMap kimliği her kullanıcı için yalnızca bir kez saklanır.
-- Sabit telefonlar değil, WhatsApp'a uygun Türkiye cep telefonları kabul edilir.
+- Sabit telefonlar değil, BTK'nın güncel numaralandırma planındaki Türkiye cep
+  telefonu blokları kabul edilir. OpenStreetMap'te WhatsApp etiketi veya bağlantısı
+  bulunan kayıtlar önce gösterilir.
+- Ücretsiz ve güvenilir bir WhatsApp hesap-sorgulama API'si olmadığı için aday,
+  WhatsApp mesaj ekranı gerçekten açıldıktan sonra `contacted` durumuna geçirilir.
+  Ekran açılmazsa `WhatsApp yok` sonucu kaydedilir ve aynı aday yeniden gösterilmez.
 - OpenStreetMap puan/yorum sağlamadığı için aday kalitesi konum, sektör, telefon,
   web sitesi ihtiyacı ve profil doluluğu üzerinden hesaplanır.
 

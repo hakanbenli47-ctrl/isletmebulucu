@@ -46,6 +46,8 @@ export interface PlaceDetails {
   openingHours?: string;
   lastVerifiedAt?: string;
   openedAt?: string;
+  whatsappEvidence?: "explicit_tag" | "explicit_link" | "mobile_only" | "unverified";
+  whatsappReason?: string;
 }
 
 export interface LeadRecord {

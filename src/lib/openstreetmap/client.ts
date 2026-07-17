@@ -1,11 +1,11 @@
 import "server-only";
-import { normalizeTurkishPhone } from "@/lib/whatsapp";
-import { normalizePhoneSearch } from "@/lib/phone-search";
+import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
 import { isOpenedWithinLastTwoYears } from "@/lib/places/activity";
 import type { PlaceDetails } from "@/types";
 
 const DEFAULT_API_URL = "https://nominatim.openstreetmap.org";
 const DEFAULT_OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
+const DEFAULT_OVERPASS_FALLBACK_URL = "https://overpass.private.coffee/api/interpreter";
 const SEARCH_CACHE_MS = 30 * 60 * 1000;
 const LOOKUP_CACHE_MS = 24 * 60 * 60 * 1000;
 const REQUEST_GAP_MS = 1_100;
@@ -131,9 +131,7 @@ function mapOverpassPlace(
 ): PlaceDetails | null {
   const tags = element.tags ?? {};
   if (!element.type || !element.id || !tags.name) return null;
-  const rawPhone = firstPhone(tags);
-  const mobile = normalizeTurkishPhone(rawPhone);
-  const normalizedPhone = normalizePhoneSearch(rawPhone);
+  const contact = contactFromOsmTags(tags);
   const primary = primaryOsmType(tags);
   const activity = activityFromTags(tags, element.timestamp);
   const address = [
@@ -148,8 +146,8 @@ function mapOverpassPlace(
     name: tags.name,
     address: address || context.province,
     province: context.province,
-    phone: rawPhone,
-    internationalPhone: mobile ? `+${mobile}` : normalizedPhone ? `+${normalizedPhone}` : rawPhone,
+    phone: contact.rawPhone,
+    internationalPhone: contact.mobile ? `+${contact.mobile}` : contact.fallbackPhone,
     websiteUri: firstWebsite(tags),
     mapUri: `https://www.openstreetmap.org/${element.type}/${element.id}`,
     businessStatus: activity.closed ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
@@ -166,58 +164,80 @@ function mapOverpassPlace(
     openingHours: tags.opening_hours,
     lastVerifiedAt: activity.lastVerifiedAt,
     openedAt: activity.openedAt,
+    whatsappEvidence: contact.whatsappEvidence,
+    whatsappReason: contact.whatsappReason,
   };
 }
 
 async function overpassSearch(sector: string, province: string): Promise<OverpassElement[]> {
   const selectors = SECTOR_SELECTORS[sector] ?? [`["name"~"${escapeOverpassRegex(sector)}",i]`];
   const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
+  const explicitWhatsAppFilter = '[~"^(contact:)?whatsapp$"~"."]';
+  const whatsAppLinkFilter = '[~"^(contact:)?(website|url)$"~"(wa\\.me|api\\.whatsapp\\.com|whatsapp:)",i]';
   const query = [
     "[out:json][timeout:25];",
     `area["boundary"="administrative"]["name"="${escapeOverpassString(province)}"]->.searchArea;`,
     "(",
     ...selectors.flatMap((selector) => [
+      `nwr${selector}${explicitWhatsAppFilter}["start_date"](area.searchArea);`,
+      `nwr${selector}${explicitWhatsAppFilter}["opening_date"](area.searchArea);`,
+      `nwr${selector}${whatsAppLinkFilter}["start_date"](area.searchArea);`,
+      `nwr${selector}${whatsAppLinkFilter}["opening_date"](area.searchArea);`,
       `nwr${selector}${phoneFilter}["start_date"](area.searchArea);`,
       `nwr${selector}${phoneFilter}["opening_date"](area.searchArea);`,
     ]),
     ");",
-    "out center meta 80;",
+    "out center meta 120;",
   ].join("\n");
-  const apiUrl = process.env.OVERPASS_API_URL || DEFAULT_OVERPASS_API_URL;
-  const cacheKey = `recent-openings-v2|${apiUrl}|${province}|${sector}`;
+  const apiUrls = overpassApiUrls();
+  const cacheKey = `recent-openings-v4|${apiUrls.join("|")}|${province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
-  let response: Response;
-  try {
-    response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "User-Agent": process.env.NOMINATIM_USER_AGENT || "IsletmeBulucu/1.0",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({ data: query }),
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === "AbortError";
-    throw new OpenDataPlacesError(503, timedOut
-      ? "Ücretsiz OpenStreetMap araması zaman aşımına uğradı. Kayıtlı ve mesaj gönderilmemiş adaylar gösterilecek."
-      : "Ücretsiz OpenStreetMap aramasına ulaşılamıyor. Kayıtlı ve mesaj gönderilmemiş adaylar gösterilecek.");
-  } finally {
-    clearTimeout(timeout);
+  let lastStatus = 503;
+  let timedOut = false;
+  for (const apiUrl of apiUrls) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 28_000);
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "User-Agent": process.env.NOMINATIM_USER_AGENT || "IsletmeBulucu/1.0",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({ data: query }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      lastStatus = response.status;
+      if (!response.ok) {
+        if (response.status === 408 || response.status === 429 || response.status >= 500) continue;
+        throw new OpenDataPlacesError(503, `Ücretsiz OpenStreetMap araması isteği kabul etmedi (${response.status}).`);
+      }
+      const data = await response.json() as { elements?: OverpassElement[] };
+      const value = uniqueOverpassElements(data.elements ?? []);
+      overpassCache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_MS, value });
+      return value;
+    } catch (error) {
+      if (error instanceof OpenDataPlacesError) throw error;
+      timedOut ||= error instanceof Error && error.name === "AbortError";
+    } finally {
+      clearTimeout(timeout);
+    }
   }
-  if (!response.ok) {
-    throw new OpenDataPlacesError(response.status === 429 ? 429 : 503, `Ücretsiz OpenStreetMap araması geçici hata verdi (${response.status}).`);
-  }
-  const data = await response.json() as { elements?: OverpassElement[] };
-  const value = uniqueOverpassElements(data.elements ?? []);
-  overpassCache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_MS, value });
-  return value;
+  throw new OpenDataPlacesError(lastStatus === 429 ? 429 : 503, timedOut
+    ? "Ücretsiz OpenStreetMap sunucuları zaman aşımına uğradı. Kayıtlı ve mesaj gönderilmemiş adaylar gösterilecek."
+    : `Ücretsiz OpenStreetMap sunucuları geçici hata verdi (${lastStatus}). Kayıtlı adaylar gösterilecek.`);
+}
+
+function overpassApiUrls() {
+  const configured = (process.env.OVERPASS_API_URLS || process.env.OVERPASS_API_URL || "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Set([...configured, DEFAULT_OVERPASS_API_URL, DEFAULT_OVERPASS_FALLBACK_URL])];
 }
 
 export async function getVisiblePlaceDetails(placeIds: string[]) {
@@ -264,9 +284,7 @@ export function mapNominatimPlace(
   if (place.category && !BUSINESS_CATEGORIES.has(place.category)) return null;
 
   const tags = place.extratags ?? {};
-  const rawPhone = firstPhone(tags);
-  const mobile = normalizeTurkishPhone(rawPhone);
-  const normalizedPhone = normalizePhoneSearch(rawPhone);
+  const contact = contactFromOsmTags(tags);
   const activity = activityFromTags(tags);
   const province = context.province ?? addressProvince(place.address);
   const primaryType = place.type || place.category || "business";
@@ -277,8 +295,8 @@ export function mapNominatimPlace(
     name,
     address: place.display_name ?? province ?? "Adres bilgisi yok",
     province: province ?? "",
-    phone: rawPhone,
-    internationalPhone: mobile ? `+${mobile}` : normalizedPhone ? `+${normalizedPhone}` : rawPhone,
+    phone: contact.rawPhone,
+    internationalPhone: contact.mobile ? `+${contact.mobile}` : contact.fallbackPhone,
     websiteUri: firstWebsite(tags),
     mapUri: `https://www.openstreetmap.org/${place.osm_type}/${place.osm_id}`,
     businessStatus: activity.closed ? "CLOSED_PERMANENTLY" : "OPERATIONAL",
@@ -297,6 +315,8 @@ export function mapNominatimPlace(
     openingHours: tags.opening_hours,
     lastVerifiedAt: activity.lastVerifiedAt,
     openedAt: activity.openedAt,
+    whatsappEvidence: contact.whatsappEvidence,
+    whatsappReason: contact.whatsappReason,
   };
 }
 
@@ -356,29 +376,9 @@ async function nominatimRequest(path: string, ttlMs: number): Promise<NominatimP
   }
 }
 
-function firstPhone(tags: Record<string, string>) {
-  const values = [
-    tags["contact:mobile"], tags.mobile,
-    tags["contact:whatsapp"], tags.whatsapp,
-    tags["contact:phone"], tags.phone,
-    tags["contact:telephone"], tags.telephone,
-    tags["contact:cell"], tags.cell,
-    tags["contact:gsm"], tags.gsm,
-  ]
-    .filter((value): value is string => Boolean(value));
-  const candidates = values
-    .flatMap((value) => value.split(/[;,|]/))
-    .map((item) => item.trim().replace(/\s*(?:ext\.?|dahili|x)\s*\d+$/i, ""))
-    .filter(Boolean);
-  return candidates.find((value) => normalizeTurkishPhone(value)) ??
-    candidates.find((value) => normalizePhoneSearch(value)) ??
-    candidates[0] ??
-    null;
-}
-
 function firstWebsite(tags: Record<string, string>) {
   const website = tags["contact:website"] || tags.website || tags.url;
-  if (website) return normalizeUrl(website);
+  if (website && !isWhatsAppLink(website)) return normalizeUrl(website);
   const instagram = tags["contact:instagram"] || tags.instagram;
   if (instagram) return normalizeSocialUrl(instagram, "instagram.com");
   const facebook = tags["contact:facebook"] || tags.facebook;

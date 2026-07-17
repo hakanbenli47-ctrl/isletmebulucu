@@ -99,7 +99,7 @@ export function qualifySearchResults(places: PlaceDetails[], options: Qualificat
 
 export function formatQualificationSummary(diagnostics: QualificationDiagnostics) {
   const reasons = [
-    [diagnostics.invalidMobile, "WhatsApp'a uygun cep telefonu yok"],
+    [diagnostics.invalidMobile, "BTK planına uygun cep telefonu yok"],
     [diagnostics.wrongLocation, "il/ülke doğrulanmadı"],
     [diagnostics.irrelevantSector, "sektör eşleşmedi"],
     [diagnostics.lowQuality, "aday kalite ölçütü yetersiz"],
@@ -121,4 +121,3 @@ function matchesPresence(uri: string | null | undefined, leadType: LeadType, pre
   if (presence === "instagram") return isInstagramProfile(uri);
   return socialProfileType(uri) === null;
 }
-

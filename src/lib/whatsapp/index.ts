@@ -1,14 +1,24 @@
+const TURKISH_MOBILE_PREFIX = /^(?:50[1567]|510|516|53\d|54\d|55[123459]|561)$/;
+const PHONE_LIKE = /(?:\+?90[\s().-]*|0[\s().-]*)?5(?:[\s().-]*\d){9}/g;
+
 export function normalizeTurkishPhone(value: string | null | undefined): string | null {
-  if (!value) return null;
-  let digits = value.replace(/\D/g, "");
+  return extractTurkishMobilePhones(value)[0] ?? null;
+}
 
-  if (digits.startsWith("0090")) digits = digits.slice(2);
-  if (/^9005\d{9}$/.test(digits)) digits = `90${digits.slice(3)}`;
-  if (digits.startsWith("05")) digits = `9${digits}`;
-  else if (digits.startsWith("5") && digits.length === 10) digits = `90${digits}`;
-
-  if (!/^905\d{9}$/.test(digits)) return null;
-  return digits;
+export function extractTurkishMobilePhones(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const decoded = safelyDecode(value);
+  const candidates = [decoded, ...(decoded.match(PHONE_LIKE) ?? [])];
+  const normalized = candidates.flatMap((candidate) => {
+    let digits = candidate.replace(/\D/g, "");
+    if (digits.startsWith("0090")) digits = digits.slice(2);
+    if (/^9005\d{9}$/.test(digits)) digits = `90${digits.slice(3)}`;
+    if (digits.startsWith("05") && digits.length === 11) digits = `9${digits}`;
+    else if (digits.startsWith("5") && digits.length === 10) digits = `90${digits}`;
+    if (!/^905\d{9}$/.test(digits)) return [];
+    return TURKISH_MOBILE_PREFIX.test(digits.slice(2, 5)) ? [digits] : [];
+  });
+  return [...new Set(normalized)];
 }
 
 export function formatTurkishMobilePhone(value: string | null | undefined): string | null {
@@ -52,4 +62,12 @@ export function personalizeWhatsAppMessage(message: string, businessName: string
     return cleanMessage.replace(defaultGreeting, `${greeting}\n\n`);
   }
   return `${greeting}\n\n${cleanMessage}`;
+}
+
+function safelyDecode(value: string) {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, "%2B"));
+  } catch {
+    return value;
+  }
 }
