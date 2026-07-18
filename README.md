@@ -30,7 +30,7 @@ NOMINATIM_API_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=IsletmeBulucu/1.0
 OVERPASS_API_URL=https://overpass-api.de/api/interpreter
 OVERPASS_API_URLS=https://maps.mail.ru/osm/tools/overpass/api/interpreter,https://overpass.private.coffee/api/interpreter,https://overpass-api.de/api/interpreter
-PLACES_MAX_CALLS_PER_SEARCH=3
+PLACES_MAX_CALLS_PER_SEARCH=8
 NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
 
@@ -70,7 +70,9 @@ Uygulamada herkese açık kayıt ekranı yoktur.
   veri ayrıntısı yenilemesinde kullanılır.
 - Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
   sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
-  kullanıcı aramasında en fazla 3 sektör/şehir çağrısı yapılır.
+  kullanıcı aramasında en fazla 8 şehir/sektör birleşimi denenir. Filtre yoksa
+  algoritma aynı ilde takılmadan 81 il ve tüm aktif sektör birleşimlerini tekrarsız
+  dolaşır; hedef sonuçları birkaç farklı şehir ve sektöre dağıtır.
 - Bir Overpass sunucusu geçici hata verirse `OVERPASS_API_URLS` listesindeki sıradaki
   açık sunucu denenir; başarılı cevap önbelleğe alınarak gereksiz tekrar önlenir.
 - Son iki takvim yılı içinde açıldığı doğrulanan işletmeler önce gösterilir. Açılış
@@ -84,6 +86,9 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 - Nominatim geçici hata verirse yalnızca daha önce kaydedilmiş, `status = 'new'`
   olan ve mesaj gönderilmemiş adaylar gösterilir.
 - Aynı OpenStreetMap kimliği her kullanıcı için yalnızca bir kez saklanır.
+- `İlgileniyor`, `Detay / demo` veya `Müşteri` sonucu alınan şehir/sektör çiftleri
+  sonraki genel aramalarda önce denenir. Bu öncelik mevcut satış kayıtlarından
+  hesaplanır; ek tablo veya veritabanı şema değişikliği gerektirmez.
 - Sabit telefonlar değil, BTK'nın güncel numaralandırma planındaki Türkiye cep
   telefonu blokları kabul edilir. OpenStreetMap'te WhatsApp etiketi veya bağlantısı
   bulunan kayıtlar önce gösterilir.

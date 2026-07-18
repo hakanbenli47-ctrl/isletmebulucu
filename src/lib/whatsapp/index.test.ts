@@ -16,7 +16,7 @@ describe("normalizeTurkishPhone", () => {
     expect(normalizeTurkishPhone(input)).toBeNull();
   });
 
-  it.each(["0500 123 45 67", "0512 123 45 67", "0556 123 45 67", "0570 123 45 67"])("BTK mobil abone bloğu olmayan %s numarasını reddeder", (input) => {
+  it.each(["0500 123 45 67", "0512 123 45 67", "0556 123 45 67", "0570 123 45 67", "0592 123 45 67", "0594 123 45 67"])("BTK bireysel mobil abone bloğu olmayan %s numarasını reddeder", (input) => {
     expect(normalizeTurkishPhone(input)).toBeNull();
   });
 

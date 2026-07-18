@@ -6,12 +6,12 @@ import { DEFAULT_SETTINGS } from "@/data/defaults";
 import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "@/data/sectors";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
 import { OpenDataPlacesError, searchPlaces } from "@/lib/openstreetmap/client";
-import { advanceSearchPosition } from "@/lib/places/progress";
+import { buildSearchPriorities, type SearchHistorySignal } from "@/lib/places/search-priority";
+import { buildSearchQueue } from "@/lib/places/search-queue";
 import { orderPotentialPlaces, withPotential } from "@/lib/places/potential";
 import { createQualificationDiagnostics, formatQualificationSummary, qualifySearchResults } from "@/lib/places/qualification";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
 import { mockSearch, mockStore } from "@/lib/mock-data";
-import { normalizePhoneSearch } from "@/lib/phone-search";
 import { normalizeTurkishPhone } from "@/lib/whatsapp";
 import { openingRecencyStatus } from "@/lib/places/activity";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -32,18 +32,37 @@ async function allExistingLeadKeys(userId: string) {
   const supabase = await createSupabaseServerClient();
   const placeIds: string[] = [];
   const mobiles: string[] = [];
+  const history: SearchHistorySignal[] = [];
   for (let from = 0; ; from += 1000) {
-    const indexedResult = await supabase.from("lead_records").select("place_id,phone_normalized").eq("user_id", userId).range(from, from + 999);
+    const indexedResult = await supabase
+      .from("lead_records")
+      .select("place_id,phone_normalized,lead_type,status,source_province,source_sector")
+      .eq("user_id", userId)
+      .range(from, from + 999);
     const result = supabaseSutunuEksikMi(indexedResult.error, "phone_normalized")
-      ? await supabase.from("lead_records").select("place_id").eq("user_id", userId).range(from, from + 999)
+      ? await supabase
+        .from("lead_records")
+        .select("place_id,lead_type,status,source_province,source_sector")
+        .eq("user_id", userId)
+        .range(from, from + 999)
       : indexedResult;
     const { data, error } = result;
     if (error) throw error;
     placeIds.push(...(data ?? []).map((item) => item.place_id));
     mobiles.push(...(data ?? []).flatMap((item) => "phone_normalized" in item && typeof item.phone_normalized === "string" ? [item.phone_normalized] : []));
+    history.push(...(data ?? []).flatMap((item) =>
+      typeof item.lead_type === "string" && typeof item.status === "string"
+        ? [{
+          lead_type: item.lead_type,
+          status: item.status,
+          source_province: typeof item.source_province === "string" ? item.source_province : null,
+          source_sector: typeof item.source_sector === "string" ? item.source_sector : null,
+        }]
+        : [],
+    ));
     if (!data || data.length < 1000) break;
   }
-  return { placeIds, mobiles };
+  return { placeIds, mobiles, history };
 }
 
 export async function POST(request: Request) {
@@ -73,37 +92,41 @@ export async function POST(request: Request) {
       return Response.json({ error: "Seçilen meslek aktif sektörleriniz arasında değil." }, { status: 400 });
     }
 
-    let position = { provinceIndex: stateRow?.province_index ?? 0, sectorIndex: stateRow?.sector_index ?? 0 };
-    position.provinceIndex %= TURKIYE_ILLERI.length;
-    position.sectorIndex %= activeSectors.length;
-    const maxCalls = Math.min(5, Math.max(1, Number(process.env.PLACES_MAX_CALLS_PER_SEARCH) || 3));
+    const priorities = buildSearchPriorities(TURKIYE_ILLERI, activeSectors, existing.history, leadType);
+    let position = {
+      provinceIndex: modulo(stateRow?.province_index ?? 0, priorities.provinces.length),
+      sectorIndex: modulo(stateRow?.sector_index ?? 0, priorities.sectors.length),
+    };
+    const maxCalls = Math.min(12, Math.max(1, Number(process.env.PLACES_MAX_CALLS_PER_SEARCH) || 8));
+    const searchQueue = buildSearchQueue({
+      requestedProvince,
+      requestedSector,
+      provinces: priorities.provinces,
+      sectors: priorities.sectors,
+      successfulPairs: priorities.successfulPairs,
+      position,
+      maxCalls,
+    });
     const seen = new Set(existing.placeIds);
     const seenMobiles = new Set(existing.mobiles);
     const diagnostics = createQualificationDiagnostics();
     const found: Array<{ details: PlaceDetails; db: Omit<LeadRecord, "details"> }> = [];
     let apiCalls = 0;
-    let filteredProvinceIndex = 0;
-    let filteredSectorIndex = 0;
-    const filteredSearch = Boolean(requestedProvince || requestedSector);
+    let failedCalls = 0;
+    let lastOpenDataError: OpenDataPlacesError | null = null;
+    const searchedProvinces = new Set<string>();
+    const searchedSectors = new Set<string>();
+    const diversityTarget = requestedProvince && requestedSector ? 1 : Math.min(4, searchQueue.length);
+    const perPairLimit = Math.max(1, Math.ceil(target / Math.max(1, diversityTarget)));
 
-    try {
-      while (apiCalls < maxCalls && found.length < target) {
-        const province = requestedProvince ?? (requestedSector ? TURKIYE_ILLERI[filteredProvinceIndex] : TURKIYE_ILLERI[position.provinceIndex]);
-        const sector = requestedSector ?? (requestedProvince ? activeSectors[filteredSectorIndex] : activeSectors[position.sectorIndex]);
+    for (const { province, sector, cursorAfter } of searchQueue) {
+      if (found.length >= target) break;
+      apiCalls += 1;
+      searchedProvinces.add(province);
+      searchedSectors.add(sector);
+      try {
         const searchResults = await searchPlaces(`${sector}, ${province}, Türkiye`, sector, { province });
         const results = leadType === "website" ? await enrichInstagramActivity(searchResults) : searchResults;
-        apiCalls += 1;
-
-        if (requestedProvince && requestedSector) {
-          filteredProvinceIndex = TURKIYE_ILLERI.length;
-          filteredSectorIndex = activeSectors.length;
-        } else if (requestedProvince) {
-          filteredSectorIndex += 1;
-        } else if (requestedSector) {
-          filteredProvinceIndex += 1;
-        } else {
-          position = advanceSearchPosition(position, TURKIYE_ILLERI.length, activeSectors.length);
-        }
 
         const eligible = qualifySearchResults(orderPotentialPlaces(results, leadType, quality), {
           leadType,
@@ -113,7 +136,7 @@ export async function POST(request: Request) {
           presence,
           seenPlaceIds: seen,
           seenMobiles,
-          limit: target - found.length,
+          limit: Math.min(target - found.length, perPairLimit),
           diagnostics,
         });
 
@@ -125,35 +148,34 @@ export async function POST(request: Request) {
             if (details) found.push({ details, db });
           }
         }
+      } catch (error) {
+        if (!(error instanceof OpenDataPlacesError)) throw error;
+        failedCalls += 1;
+        lastOpenDataError = error;
+      }
+      if (cursorAfter) position = cursorAfter;
+    }
 
-        if (
-          (requestedProvince && requestedSector) ||
-          (requestedProvince && filteredSectorIndex >= activeSectors.length) ||
-          (requestedSector && filteredProvinceIndex >= TURKIYE_ILLERI.length)
-        ) break;
+    if (!found.length && lastOpenDataError && failedCalls === apiCalls) {
+      const cached = await cachedUncontactedLeads(user.id, leadType, target, requestedProvince, requestedSector);
+      if (cached.length) {
+        return Response.json({
+          leads: cached,
+          found: 0,
+          requested: target,
+          apiCalls,
+          limited: cached.length < target,
+          fromCache: true,
+          message: `Açık veri servisleri geçici olarak yanıt vermedi. Daha önce kaydedilmiş ve mesaj gönderilmemiş ${cached.length} işletme gösteriliyor.`,
+        });
       }
-    } catch (error) {
-      if (error instanceof OpenDataPlacesError) {
-        const cached = await cachedUncontactedLeads(user.id, leadType, target, requestedProvince, requestedSector);
-        if (cached.length) {
-          return Response.json({
-            leads: cached,
-            found: 0,
-            requested: target,
-            apiCalls,
-            limited: cached.length < target,
-            fromCache: true,
-            message: `Açık veri servisi geçici olarak yanıt vermedi. Daha önce kaydedilmiş ve mesaj gönderilmemiş ${cached.length} işletme gösteriliyor.`,
-          });
-        }
-      }
-      throw error;
+      throw lastOpenDataError;
     }
 
     const writes = [
       supabase.from("search_runs").insert({ user_id: user.id, lead_type: leadType, requested_count: target, returned_count: found.length, api_call_count: apiCalls }),
     ];
-    if (!filteredSearch) {
+    if (!(requestedProvince && requestedSector)) {
       writes.push(supabase.from("search_states").upsert({ user_id: user.id, lead_type: leadType, province_index: position.provinceIndex, sector_index: position.sectorIndex }, { onConflict: "user_id,lead_type" }));
     }
     const writeResults = await Promise.all(writes);
@@ -170,7 +192,9 @@ export async function POST(request: Request) {
     const limited = found.length < target;
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
     const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
-    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${formatQualificationSummary(diagnostics)}` });
+    const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} açık veri sorgusu denendi.`;
+    const partialFailureLabel = failedCalls ? ` ${failedCalls} sorgu geçici servis hatası nedeniyle atlandı.` : "";
+    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${coverageLabel}${partialFailureLabel} ${formatQualificationSummary(diagnostics)}` });
   } catch (error) {
     return apiError(error);
   }
@@ -182,7 +206,7 @@ async function saveNewLeads(userId: string, leadType: LeadType, province: string
   const rows = places.map((place) => ({
     user_id: userId,
     place_id: place.placeId,
-    phone_normalized: normalizePhoneSearch(place.internationalPhone ?? place.phone),
+    phone_normalized: normalizeTurkishPhone(place.internationalPhone ?? place.phone),
     lead_type: leadType,
     status: "new",
     source_province: province,
@@ -259,4 +283,8 @@ function sanitizeSectors(value: unknown, allowed: readonly string[]) {
   if (value.some((item) => typeof item === "string" && !allowed.includes(item))) return [...allowed];
   const clean = value.filter((item): item is string => typeof item === "string" && allowed.includes(item));
   return clean.length ? clean : [...allowed];
+}
+
+function modulo(value: number, divisor: number) {
+  return ((value % divisor) + divisor) % divisor;
 }

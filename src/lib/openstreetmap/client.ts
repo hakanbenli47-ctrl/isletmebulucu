@@ -1,4 +1,5 @@
 import "server-only";
+import { TURKIYE_IL_ISO_KODLARI, type TurkiyeIli } from "@/data/turkiye-illeri";
 import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
 import { openingRecencyStatus } from "@/lib/places/activity";
 import type { PlaceDetails } from "@/types";
@@ -8,9 +9,11 @@ const DEFAULT_OVERPASS_FAST_URL = "https://maps.mail.ru/osm/tools/overpass/api/i
 const DEFAULT_OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
 const DEFAULT_OVERPASS_FALLBACK_URL = "https://overpass.private.coffee/api/interpreter";
 const SEARCH_CACHE_MS = 30 * 60 * 1000;
+const EMPTY_SEARCH_CACHE_MS = 5 * 60 * 1000;
 const LOOKUP_CACHE_MS = 24 * 60 * 60 * 1000;
 const REQUEST_GAP_MS = 1_100;
 const REQUEST_TIMEOUT_MS = 15_000;
+const OVERPASS_RESULT_LIMIT = 500;
 const BUSINESS_CATEGORIES = new Set([
   "amenity", "shop", "office", "craft", "healthcare", "leisure",
   "tourism", "industrial", "man_made",
@@ -173,16 +176,20 @@ function mapOverpassPlace(
 async function overpassSearch(sector: string, province: string): Promise<OverpassElement[]> {
   const selectors = SECTOR_SELECTORS[sector] ?? [`["name"~"${escapeOverpassRegex(sector)}",i]`];
   const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
+  const provinceIsoCode = TURKIYE_IL_ISO_KODLARI[province as TurkiyeIli];
+  const areaSelector = provinceIsoCode
+    ? `area["boundary"="administrative"]["ISO3166-2"="${provinceIsoCode}"]->.searchArea;`
+    : `area["boundary"="administrative"]["admin_level"="4"]["name"="${escapeOverpassString(province)}"]->.searchArea;`;
   const query = [
     "[out:json][timeout:14];",
-    `area["boundary"="administrative"]["admin_level"="4"]["name"="${escapeOverpassString(province)}"]->.searchArea;`,
+    areaSelector,
     "(",
     ...selectors.map((selector) => `nwr${selector}${phoneFilter}(area.searchArea);`),
     ");",
-    "out center 100;",
+    `out center ${OVERPASS_RESULT_LIMIT};`,
   ].join("\n");
   const apiUrls = overpassApiUrls();
-  const cacheKey = `contactable-businesses-v5|${apiUrls.join("|")}|${province}|${sector}`;
+  const cacheKey = `contactable-businesses-v6|${apiUrls.join("|")}|${provinceIsoCode ?? province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -210,7 +217,7 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
       }
       const data = await response.json() as { elements?: OverpassElement[] };
       const value = uniqueOverpassElements(data.elements ?? []);
-      overpassCache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_MS, value });
+      overpassCache.set(cacheKey, { expiresAt: Date.now() + (value.length ? SEARCH_CACHE_MS : EMPTY_SEARCH_CACHE_MS), value });
       return value;
     } catch (error) {
       if (error instanceof OpenDataPlacesError) throw error;

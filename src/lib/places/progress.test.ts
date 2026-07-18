@@ -2,15 +2,23 @@ import { describe, expect, it } from "vitest";
 import { advanceSearchPosition } from "./progress";
 
 describe("advanceSearchPosition", () => {
-  it("önce sektörü ilerletir", () => {
-    expect(advanceSearchPosition({ provinceIndex: 3, sectorIndex: 1 }, 81, 4)).toEqual({ provinceIndex: 3, sectorIndex: 2 });
+  it("ardışık çağrılarda hem şehri hem sektörü değiştirir", () => {
+    expect(advanceSearchPosition({ provinceIndex: 0, sectorIndex: 0 }, 81, 4)).toEqual({ provinceIndex: 2, sectorIndex: 1 });
   });
-  it("son sektörden sonra şehre geçer", () => {
-    expect(advanceSearchPosition({ provinceIndex: 3, sectorIndex: 3 }, 81, 4)).toEqual({ provinceIndex: 4, sectorIndex: 0 });
-  });
-  it("81 il tamamlanınca başa döner", () => {
-    expect(advanceSearchPosition({ provinceIndex: 80, sectorIndex: 3 }, 81, 4)).toEqual({ provinceIndex: 0, sectorIndex: 0 });
+
+  it("bütün şehir-sektör çiftlerini tekrarsız dolaşıp başlangıca döner", () => {
+    const provinceCount = 5;
+    const sectorCount = 4;
+    const visited = new Set<string>();
+    let position = { provinceIndex: 0, sectorIndex: 0 };
+
+    for (let index = 0; index < provinceCount * sectorCount; index += 1) {
+      visited.add(`${position.provinceIndex}:${position.sectorIndex}`);
+      position = advanceSearchPosition(position, provinceCount, sectorCount);
+    }
+
+    expect(visited.size).toBe(provinceCount * sectorCount);
+    expect(position).toEqual({ provinceIndex: 0, sectorIndex: 0 });
   });
 });
-
 

@@ -1,3 +1,5 @@
+// BTK Genel Numaralandırma Planı (20.01.2026): bireysel mobil bloklar.
+// 512 çağrı hizmeti, 57X M2M, 592 GMPCS ve 594 GSM-R olduğu için aday telefonu değildir.
 const TURKISH_MOBILE_PREFIX = /^(?:50[1567]|510|516|53\d|54\d|55[123459]|561)$/;
 const PHONE_LIKE = /(?:\+?90[\s().-]*|0[\s().-]*)?5(?:[\s().-]*\d){9}/g;
 
