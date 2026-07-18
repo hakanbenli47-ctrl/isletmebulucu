@@ -17,14 +17,19 @@ describe("arama filtresi kuyruğu", () => {
 
   it("yalnız il seçilince ili sabit tutup aktif sektörleri ilerletir", () => {
     const queue = buildSearchQueue({ ...base, requestedProvince: "Ankara" });
-    expect(queue.map((item) => item.province)).toEqual(["Ankara", "Ankara", "Ankara"]);
-    expect(queue.map((item) => item.sector)).toEqual(base.sectors);
+    expect(queue.map((item) => item.province)).toEqual(["Ankara", "Ankara", "Ankara", "Ankara"]);
+    expect(queue.map((item) => item.sector)).toEqual(["Kuaför", ...base.sectors]);
   });
 
   it("yalnız sektör seçilince sektörü sabit tutup şehirleri ilerletir", () => {
     const queue = buildSearchQueue({ ...base, requestedSector: "Mobilyacı" });
-    expect(queue.map((item) => item.sector)).toEqual(["Mobilyacı", "Mobilyacı", "Mobilyacı"]);
-    expect(queue.map((item) => item.province)).toEqual(base.provinces);
+    expect(queue.map((item) => item.sector)).toEqual(["Mobilyacı", "Mobilyacı", "Mobilyacı", "Mobilyacı"]);
+    expect(queue.map((item) => item.province)).toEqual(["İstanbul", ...base.provinces]);
+  });
+
+  it("filtresiz ilk aramayı sonuç ihtimali yüksek başlangıç çiftiyle sabitler", () => {
+    const queue = buildSearchQueue({ ...base, position: { provinceIndex: 2, sectorIndex: 2 } });
+    expect(queue[0]).toMatchObject({ province: "İstanbul", sector: "Kuaför", cursorAfter: undefined });
   });
 
   it("filtresiz aramada başarılı çifti önce, farklı şehir/sektörleri ardından dener", () => {

@@ -14,6 +14,7 @@ const LOOKUP_CACHE_MS = 24 * 60 * 60 * 1000;
 const REQUEST_GAP_MS = 1_100;
 const REQUEST_TIMEOUT_MS = 15_000;
 const OVERPASS_RESULT_LIMIT = 500;
+const OVERPASS_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;
 const BUSINESS_CATEGORIES = new Set([
   "amenity", "shop", "office", "craft", "healthcare", "leisure",
   "tourism", "industrial", "man_made",
@@ -101,11 +102,13 @@ type GlobalNominatimState = typeof globalThis & {
   __nominatimQueue?: Promise<void>;
   __nominatimLastRequestAt?: number;
   __overpassCache?: Map<string, CacheItem<OverpassElement[]>>;
+  __overpassEndpointBackoff?: Map<string, number>;
 };
 
 const globalState = globalThis as GlobalNominatimState;
 const responseCache = globalState.__nominatimCache ??= new Map();
 const overpassCache = globalState.__overpassCache ??= new Map();
+const overpassEndpointBackoff = globalState.__overpassEndpointBackoff ??= new Map();
 globalState.__nominatimQueue ??= Promise.resolve();
 globalState.__nominatimLastRequestAt ??= 0;
 
@@ -189,7 +192,7 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
     `out center ${OVERPASS_RESULT_LIMIT};`,
   ].join("\n");
   const apiUrls = overpassApiUrls();
-  const cacheKey = `contactable-businesses-v6|${apiUrls.join("|")}|${provinceIsoCode ?? province}|${sector}`;
+  const cacheKey = `contactable-businesses-v6|${[...apiUrls].sort().join("|")}|${provinceIsoCode ?? province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -212,16 +215,21 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
       });
       lastStatus = response.status;
       if (!response.ok) {
-        if (response.status === 408 || response.status === 429 || response.status >= 500) continue;
+        if (response.status === 408 || response.status === 429 || response.status >= 500) {
+          markOverpassEndpointFailed(apiUrl);
+          continue;
+        }
         throw new OpenDataPlacesError(503, `Ücretsiz OpenStreetMap araması isteği kabul etmedi (${response.status}).`);
       }
       const data = await response.json() as { elements?: OverpassElement[] };
       const value = uniqueOverpassElements(data.elements ?? []);
+      overpassEndpointBackoff.delete(apiUrl);
       overpassCache.set(cacheKey, { expiresAt: Date.now() + (value.length ? SEARCH_CACHE_MS : EMPTY_SEARCH_CACHE_MS), value });
       return value;
     } catch (error) {
       if (error instanceof OpenDataPlacesError) throw error;
       timedOut ||= error instanceof Error && error.name === "AbortError";
+      markOverpassEndpointFailed(apiUrl);
     } finally {
       clearTimeout(timeout);
     }
@@ -236,7 +244,16 @@ function overpassApiUrls() {
     .split(/[\s,]+/)
     .map((value) => value.trim())
     .filter(Boolean);
-  return [...new Set([...configured, DEFAULT_OVERPASS_FAST_URL, DEFAULT_OVERPASS_FALLBACK_URL, DEFAULT_OVERPASS_API_URL])];
+  const urls = [...new Set([...configured, DEFAULT_OVERPASS_FAST_URL, DEFAULT_OVERPASS_FALLBACK_URL, DEFAULT_OVERPASS_API_URL])];
+  const now = Date.now();
+  return urls.sort((left, right) =>
+    Number((overpassEndpointBackoff.get(left) ?? 0) > now) -
+    Number((overpassEndpointBackoff.get(right) ?? 0) > now),
+  );
+}
+
+function markOverpassEndpointFailed(apiUrl: string) {
+  overpassEndpointBackoff.set(apiUrl, Date.now() + OVERPASS_FAILURE_COOLDOWN_MS);
 }
 
 export async function getVisiblePlaceDetails(placeIds: string[]) {

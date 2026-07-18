@@ -116,8 +116,7 @@ export async function POST(request: Request) {
     let lastOpenDataError: OpenDataPlacesError | null = null;
     const searchedProvinces = new Set<string>();
     const searchedSectors = new Set<string>();
-    const diversityTarget = requestedProvince && requestedSector ? 1 : Math.min(4, searchQueue.length);
-    const perPairLimit = Math.max(1, Math.ceil(target / Math.max(1, diversityTarget)));
+    let currentPoolHasMore = false;
 
     for (const { province, sector, cursorAfter } of searchQueue) {
       if (found.length >= target) break;
@@ -126,9 +125,9 @@ export async function POST(request: Request) {
       searchedSectors.add(sector);
       try {
         const searchResults = await searchPlaces(`${sector}, ${province}, Türkiye`, sector, { province });
-        const results = leadType === "website" ? await enrichInstagramActivity(searchResults) : searchResults;
+        const remaining = target - found.length;
 
-        const eligible = qualifySearchResults(orderPotentialPlaces(results, leadType, quality), {
+        const eligible = qualifySearchResults(orderPotentialPlaces(searchResults, leadType, quality), {
           leadType,
           sector,
           province,
@@ -136,13 +135,22 @@ export async function POST(request: Request) {
           presence,
           seenPlaceIds: seen,
           seenMobiles,
-          limit: Math.min(target - found.length, perPairLimit),
+          // Bir fazla aday isteyerek aynı ücretsiz sonuç havuzunda devam edecek
+          // yeni işletme kalıp kalmadığını veritabanına ek yazı atmadan anlarız.
+          limit: remaining + 1,
           diagnostics,
         });
+        const selectedCandidates = eligible.slice(0, remaining);
+        currentPoolHasMore = eligible.length > selectedCandidates.length;
+        // Instagram canlı kontrolü pahalı olabilir; yüzlerce ham sonuç yerine yalnızca
+        // gerçekten gösterilecek küçük aday grubunda çalıştırılır.
+        const selected = leadType === "website"
+          ? await enrichInstagramActivity(selectedCandidates)
+          : selectedCandidates;
 
-        if (eligible.length) {
-          const inserted = await saveNewLeads(user.id, leadType, province, sector, eligible);
-          const byId = new Map(eligible.map((place) => [place.placeId, place]));
+        if (selected.length) {
+          const inserted = await saveNewLeads(user.id, leadType, province, sector, selected);
+          const byId = new Map(selected.map((place) => [place.placeId, place]));
           for (const db of inserted) {
             const details = byId.get(db.place_id);
             if (details) found.push({ details, db });
@@ -153,7 +161,10 @@ export async function POST(request: Request) {
         failedCalls += 1;
         lastOpenDataError = error;
       }
-      if (cursorAfter) position = cursorAfter;
+      // Havuzda hedefin dışında yeni aday kaldıysa imleci ilerletmeyiz. Sonraki
+      // tıklama aynı önbellekten, daha önce kaydedilenleri atlayarak anında devam eder.
+      if (cursorAfter && !currentPoolHasMore) position = cursorAfter;
+      if (currentPoolHasMore) break;
     }
 
     if (!found.length && lastOpenDataError && failedCalls === apiCalls) {
@@ -193,8 +204,9 @@ export async function POST(request: Request) {
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
     const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
     const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} açık veri sorgusu denendi.`;
+    const continuationLabel = currentPoolHasMore ? " Aynı filtrede sıradaki yeni işletmeler hazır." : "";
     const partialFailureLabel = failedCalls ? ` ${failedCalls} sorgu geçici servis hatası nedeniyle atlandı.` : "";
-    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${coverageLabel}${partialFailureLabel} ${formatQualificationSummary(diagnostics)}` });
+    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${coverageLabel}${continuationLabel}${partialFailureLabel} ${formatQualificationSummary(diagnostics)}` });
   } catch (error) {
     return apiError(error);
   }

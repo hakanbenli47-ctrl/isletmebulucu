@@ -37,6 +37,16 @@ export function buildSearchQueue(options: SearchQueueOptions): QueuedSearchPair[
     add(pair.province, pair.sector);
   }
 
+  // Daha önce sonuç alınmamış veya imleci ilerlemiş kurulumlarda ilk çağrıyı
+  // yüksek verimli şehir/sektörle başlatır. Havuz bitince aşağıdaki imleç kaldığı
+  // yerden 81 il ve tüm aktif sektörleri dolaşmaya devam eder.
+  if (!matchingSuccesses.length) {
+    add(
+      options.requestedProvince ?? options.provinces[0],
+      options.requestedSector ?? options.sectors[0],
+    );
+  }
+
   if (options.requestedProvince) {
     let sectorIndex = modulo(options.position.sectorIndex, options.sectors.length);
     for (let attempts = 0; attempts < options.sectors.length && pairs.length < options.maxCalls; attempts += 1) {
