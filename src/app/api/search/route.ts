@@ -7,7 +7,7 @@ import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "@/data/sectors";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
 import { OpenDataPlacesError, searchPlaces } from "@/lib/openstreetmap/client";
 import { buildSearchPriorities, type SearchHistorySignal } from "@/lib/places/search-priority";
-import { buildSearchQueue } from "@/lib/places/search-queue";
+import { balancedResultLimit, buildSearchQueue, successfulResultLimit } from "@/lib/places/search-queue";
 import { orderPotentialPlaces, withPotential } from "@/lib/places/potential";
 import { createQualificationDiagnostics, formatQualificationSummary, qualifySearchResults } from "@/lib/places/qualification";
 import { enrichInstagramActivity } from "@/lib/instagram/client";
@@ -93,6 +93,11 @@ export async function POST(request: Request) {
     }
 
     const priorities = buildSearchPriorities(TURKIYE_ILLERI, activeSectors, existing.history, leadType);
+    const isMixedSearch = !requestedProvince && !requestedSector;
+    const priorityResultLimit = successfulResultLimit(
+      target,
+      isMixedSearch && priorities.successfulPairs.length > 0,
+    );
     let position = {
       provinceIndex: modulo(stateRow?.province_index ?? 0, priorities.provinces.length),
       sectorIndex: modulo(stateRow?.sector_index ?? 0, priorities.sectors.length),
@@ -117,15 +122,29 @@ export async function POST(request: Request) {
     const searchedProvinces = new Set<string>();
     const searchedSectors = new Set<string>();
     let currentPoolHasMore = false;
+    let priorityFound = 0;
+    const deferredPriority: Array<{ province: string; sector: string; candidates: PlaceDetails[] }> = [];
+    const deferredCoverage: Array<{ province: string; sector: string; candidates: PlaceDetails[] }> = [];
+    const isSectorSweep = !requestedSector && searchQueue.length > 1;
+    let sweepCallsRemaining = searchQueue.filter((pair) => pair.mixGroup !== "priority").length;
 
-    for (const { province, sector, cursorAfter } of searchQueue) {
+    for (const { province, sector, cursorAfter, mixGroup } of searchQueue) {
       if (found.length >= target) break;
+      const remaining = target - found.length;
+      const isSweepPair = isSectorSweep && mixGroup !== "priority";
+      const selectionLimit = mixGroup === "priority"
+        ? Math.min(remaining, Math.max(0, priorityResultLimit - priorityFound))
+        : isSweepPair
+          ? balancedResultLimit(remaining, sweepCallsRemaining)
+          : remaining;
+      if (isSweepPair) sweepCallsRemaining = Math.max(0, sweepCallsRemaining - 1);
+      if (selectionLimit <= 0) continue;
+
       apiCalls += 1;
       searchedProvinces.add(province);
       searchedSectors.add(sector);
       try {
         const searchResults = await searchPlaces(`${sector}, ${province}, Türkiye`, sector, { province });
-        const remaining = target - found.length;
 
         const eligible = qualifySearchResults(orderPotentialPlaces(searchResults, leadType, quality), {
           leadType,
@@ -137,11 +156,19 @@ export async function POST(request: Request) {
           seenMobiles,
           // Bir fazla aday isteyerek aynı ücretsiz sonuç havuzunda devam edecek
           // yeni işletme kalıp kalmadığını veritabanına ek yazı atmadan anlarız.
-          limit: remaining + 1,
+          // Çok sektörlü taramada tek bir yoğun sektör bütün tabloyu doldurmasın diye
+          // sektör başına pay uygular, fazladan adayları son tamamlama için bellekte tutarız.
+          limit: mixGroup === "priority" || isSweepPair ? remaining + 1 : selectionLimit + 1,
           diagnostics,
         });
-        const selectedCandidates = eligible.slice(0, remaining);
-        currentPoolHasMore = eligible.length > selectedCandidates.length;
+        const selectedCandidates = eligible.slice(0, selectionLimit);
+        const poolHasMore = eligible.length > selectedCandidates.length;
+        if (mixGroup === "priority" && poolHasMore) {
+          deferredPriority.push({ province, sector, candidates: eligible.slice(selectionLimit) });
+        } else if (isSweepPair && poolHasMore) {
+          deferredCoverage.push({ province, sector, candidates: eligible.slice(selectionLimit) });
+        }
+        if (!isSectorSweep) currentPoolHasMore = poolHasMore;
         // Instagram canlı kontrolü pahalı olabilir; yüzlerce ham sonuç yerine yalnızca
         // gerçekten gösterilecek küçük aday grubunda çalıştırılır.
         const selected = leadType === "website"
@@ -155,6 +182,7 @@ export async function POST(request: Request) {
             const details = byId.get(db.place_id);
             if (details) found.push({ details, db });
           }
+          if (mixGroup === "priority") priorityFound += inserted.length;
         }
       } catch (error) {
         if (!(error instanceof OpenDataPlacesError)) throw error;
@@ -163,8 +191,45 @@ export async function POST(request: Request) {
       }
       // Havuzda hedefin dışında yeni aday kaldıysa imleci ilerletmeyiz. Sonraki
       // tıklama aynı önbellekten, daha önce kaydedilenleri atlayarak anında devam eder.
-      if (cursorAfter && !currentPoolHasMore) position = cursorAfter;
-      if (currentPoolHasMore) break;
+      if (cursorAfter && (isSectorSweep || !currentPoolHasMore)) position = cursorAfter;
+      if (!isSectorSweep && currentPoolHasMore) break;
+    }
+
+    // Önce farklı sektörlerde bulunan yedeklerle hedef sayıyı tamamlarız; böylece
+    // tablo çeşitliliği korunur. Bunlar da yetmezse öncelikli havuz kullanılabilir.
+    if (isSectorSweep && found.length < target) {
+      for (const batch of deferredCoverage) {
+        const candidates = batch.candidates.slice(0, target - found.length);
+        if (!candidates.length) continue;
+        const selected = leadType === "website"
+          ? await enrichInstagramActivity(candidates)
+          : candidates;
+        const inserted = await saveNewLeads(user.id, leadType, batch.province, batch.sector, selected);
+        const byId = new Map(selected.map((place) => [place.placeId, place]));
+        for (const db of inserted) {
+          const details = byId.get(db.place_id);
+          if (details) found.push({ details, db });
+        }
+        if (found.length >= target) break;
+      }
+    }
+
+    if (isMixedSearch && found.length < target) {
+      for (const batch of deferredPriority) {
+        const candidates = batch.candidates.slice(0, target - found.length);
+        if (!candidates.length) continue;
+        const selected = leadType === "website"
+          ? await enrichInstagramActivity(candidates)
+          : candidates;
+        const inserted = await saveNewLeads(user.id, leadType, batch.province, batch.sector, selected);
+        const byId = new Map(selected.map((place) => [place.placeId, place]));
+        for (const db of inserted) {
+          const details = byId.get(db.place_id);
+          if (details) found.push({ details, db });
+        }
+        priorityFound += inserted.length;
+        if (found.length >= target) break;
+      }
     }
 
     if (!found.length && lastOpenDataError && failedCalls === apiCalls) {
@@ -205,8 +270,20 @@ export async function POST(request: Request) {
     const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
     const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} açık veri sorgusu denendi.`;
     const continuationLabel = currentPoolHasMore ? " Aynı filtrede sıradaki yeni işletmeler hazır." : "";
+    const mixLabel = isMixedSearch
+      ? ` Karışım: ${priorityFound} öncelikli, ${Math.max(0, found.length - priorityFound)} genel sektör taraması işletmesi.`
+      : "";
     const partialFailureLabel = failedCalls ? ` ${failedCalls} sorgu geçici servis hatası nedeniyle atlandı.` : "";
-    return Response.json({ leads, found: found.length, requested: target, apiCalls, limited, diagnostics, message: `${resultLabel} ${coverageLabel}${continuationLabel}${partialFailureLabel} ${formatQualificationSummary(diagnostics)}` });
+    return Response.json({
+      leads,
+      found: found.length,
+      requested: target,
+      apiCalls,
+      limited,
+      diagnostics,
+      mix: isMixedSearch ? { priority: priorityFound, coverage: Math.max(0, found.length - priorityFound) } : undefined,
+      message: `${resultLabel} ${coverageLabel}${mixLabel}${continuationLabel}${partialFailureLabel} ${formatQualificationSummary(diagnostics)}`,
+    });
   } catch (error) {
     return apiError(error);
   }

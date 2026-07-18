@@ -65,14 +65,19 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 
 ## Açık veri araması ve kayıt davranışı
 
-- İşletme aramaları OpenStreetMap'in Overpass servisine; telefon etiketi bulunan
-  sektör kayıtlarını getirecek şekilde yapılır. Nominatim yalnızca açık
-  veri ayrıntısı yenilemesinde kullanılır.
+- Yapısal etiketi bulunan sektörler OpenStreetMap Overpass ile aranır. Tente, cam
+  balkon ve nakliyat gibi işletme adına bağımlı sektörlerde zaman aşımına giren geniş
+  regex yerine Nominatim metin araması kullanılır. İki kaynağın sonuçları aynı OSM
+  kimliğiyle tekilleştirilip aynı telefon, konum, sektör ve site kontrolünden geçer.
 - Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
   sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
   kullanıcı aramasında en fazla 8 şehir/sektör birleşimi denenir. Filtre yoksa
-  algoritma aynı ilde takılmadan 81 il ve tüm aktif sektör birleşimlerini tekrarsız
-  dolaşır; hedef sonuçları birkaç farklı şehir ve sektöre dağıtır.
+  sonuçların yaklaşık `%40`ı demo/ilgi/müşteri alınan birleşimlerden gelir. Kalan
+  bölümde her aktif sektör kendi OSM etiketiyle ayrı sorgulanır; 81 il × aktif sektör
+  birleşimleri tekrar etmeden dolaşılır ve tarama sonraki çağrıda kaldığı yerden devam
+  eder. Sektör başına dengeli sonuç payı, kuaför gibi yoğun bir kategorinin tabloyu
+  tek başına doldurmasını önler. Tüm uygun adaylar mevcut `lead_records` tablosunda
+  birleştirilir; yeni tablo veya veritabanı şema değişikliği gerekmez.
 - Bir Overpass sunucusu geçici hata verirse `OVERPASS_API_URLS` listesindeki sıradaki
   açık sunucu denenir; başarılı cevap önbelleğe alınarak gereksiz tekrar önlenir.
 - Son iki takvim yılı içinde açıldığı doğrulanan işletmeler önce gösterilir. Açılış
@@ -87,7 +92,8 @@ Uygulamada herkese açık kayıt ekranı yoktur.
   olan ve mesaj gönderilmemiş adaylar gösterilir.
 - Aynı OpenStreetMap kimliği her kullanıcı için yalnızca bir kez saklanır.
 - `İlgileniyor`, `Detay / demo` veya `Müşteri` sonucu alınan şehir/sektör çiftleri
-  sonraki genel aramalarda önce denenir. Bu öncelik mevcut satış kayıtlarından
+  sonraki filtresiz genel aramaların yaklaşık `%40`lık bölümünde değerlendirilir.
+  Bu öncelik mevcut satış kayıtlarından
   hesaplanır; ek tablo veya veritabanı şema değişikliği gerektirmez.
 - Sabit telefonlar değil, BTK'nın güncel numaralandırma planındaki Türkiye cep
   telefonu blokları kabul edilir. OpenStreetMap'te WhatsApp etiketi veya bağlantısı

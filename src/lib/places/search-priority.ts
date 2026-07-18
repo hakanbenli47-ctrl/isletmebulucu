@@ -19,6 +19,14 @@ const SUCCESS_WEIGHTS: Partial<Record<LeadStatus, number>> = {
   customer: 12,
 };
 
+// Şehir seçilmeden tek sektör arandığında ilk sorguların sonuçsuz küçük illere
+// yığılmasını önler. Diğer bütün iller özgün sıralarıyla listenin devamında kalır.
+const PROVINCE_BASE_PRIORITY = [
+  "İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Kocaeli", "Konya",
+  "Adana", "Gaziantep", "Mersin", "Kayseri", "Manisa", "Tekirdağ", "Samsun",
+  "Denizli", "Sakarya", "Balıkesir", "Eskişehir", "Muğla", "Hatay",
+] as const;
+
 // Açık veride yapısal OSM etiketi ve telefon kaydı daha sık bulunan sektörler önce
 // denenir. Listedeki diğer tüm aktif sektörler de sıralamanın devamında korunur.
 const WEBSITE_BASE_PRIORITY = [
@@ -91,7 +99,7 @@ export function buildSearchPriorities(
 
   const baseSectorOrder = leadType === "website" ? WEBSITE_BASE_PRIORITY : ACCOUNTING_BASE_PRIORITY;
   return {
-    provinces: rankValues(provinces, provinceScores, provinces),
+    provinces: rankValues(provinces, provinceScores, PROVINCE_BASE_PRIORITY),
     sectors: rankValues(sectors, sectorScores, baseSectorOrder),
     successfulPairs: [...pairScores.values()].sort((a, b) =>
       b.score - a.score ||

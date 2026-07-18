@@ -1,6 +1,7 @@
 import "server-only";
 import { TURKIYE_IL_ISO_KODLARI, type TurkiyeIli } from "@/data/turkiye-illeri";
 import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
+import { sectorQueryPlan } from "@/lib/openstreetmap/sector-selectors";
 import { openingRecencyStatus } from "@/lib/places/activity";
 import type { PlaceDetails } from "@/types";
 
@@ -10,6 +11,7 @@ const DEFAULT_OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
 const DEFAULT_OVERPASS_FALLBACK_URL = "https://overpass.private.coffee/api/interpreter";
 const SEARCH_CACHE_MS = 30 * 60 * 1000;
 const EMPTY_SEARCH_CACHE_MS = 5 * 60 * 1000;
+const NOMINATIM_SEARCH_CACHE_MS = 6 * 60 * 60 * 1000;
 const LOOKUP_CACHE_MS = 24 * 60 * 60 * 1000;
 const REQUEST_GAP_MS = 1_100;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -19,63 +21,6 @@ const BUSINESS_CATEGORIES = new Set([
   "amenity", "shop", "office", "craft", "healthcare", "leisure",
   "tourism", "industrial", "man_made",
 ]);
-
-const SECTOR_SELECTORS: Record<string, string[]> = {
-  "Oto yıkama": ['["amenity"="car_wash"]'],
-  "Oto detaylandırma": ['["name"~"oto detay|detailing|detaylandırma",i]'],
-  "Araç kaplama": ['["name"~"araç kaplama|oto kaplama|folyo kaplama|car wrap",i]'],
-  "Cam balkon": ['["name"~"cam balkon",i]'],
-  Tente: ['["name"~"tente",i]'],
-  Tadilat: ['["name"~"tadilat|yapı dekorasyon",i]'],
-  Dekorasyon: ['["office"="interior_design"]', '["name"~"dekorasyon|iç mimar",i]'],
-  "Temizlik şirketi": ['["office"="cleaning"]', '["name"~"temizlik",i]'],
-  "Koltuk yıkama": ['["name"~"koltuk yıkama",i]'],
-  "Halı yıkama": ['["name"~"halı yıkama",i]'],
-  İlaçlama: ['["craft"="pest_control"]', '["name"~"ilaçlama|pest control",i]'],
-  "Güzellik salonu": ['["shop"="beauty"]'],
-  Kuaför: ['["shop"="hairdresser"]'],
-  Berber: ['["shop"="hairdresser"]["hairdresser"="male"]', '["name"~"berber",i]'],
-  Diyetisyen: ['["healthcare"="dietitian"]', '["name"~"diyetisyen|beslenme danışman",i]'],
-  Psikolog: ['["healthcare"="psychotherapist"]', '["name"~"psikolog|psikoterapi",i]'],
-  Fizyoterapist: ['["healthcare"="physiotherapist"]', '["name"~"fizyoterapi",i]'],
-  "Diş kliniği": ['["amenity"="dentist"]'],
-  "Veteriner kliniği": ['["amenity"="veterinary"]'],
-  "Emlak danışmanı": ['["office"="estate_agent"]'],
-  "Mimarlık ofisi": ['["office"="architect"]'],
-  Fotoğrafçı: ['["craft"="photographer"]', '["shop"="photo"]'],
-  "Düğün salonu": ['["amenity"="events_venue"]', '["name"~"düğün salonu|event|dav(et|et)",i]'],
-  "Spor salonu": ['["leisure"="fitness_centre"]'],
-  Anaokulu: ['["amenity"="kindergarten"]'],
-  "Özel eğitim kursu": ['["office"="educational_institution"]', '["name"~"eğitim|kurs|akademi",i]'],
-  Matbaa: ['["craft"="printer"]', '["shop"="copyshop"]'],
-  Çiçekçi: ['["shop"="florist"]'],
-  Pastane: ['["shop"="pastry"]', '["shop"="bakery"]'],
-  Mobilyacı: ['["shop"="furniture"]'],
-  Elektrikçi: ['["craft"="electrician"]'],
-  Tesisatçı: ['["craft"="plumber"]'],
-  "Kombi servisi": ['["craft"="heating_engineer"]', '["name"~"kombi|ısıtma",i]'],
-  Nakliyat: ['["office"="moving_company"]', '["name"~"nakliyat|evden eve",i]'],
-  Transfer: ['["office"="logistics"]', '["name"~"transfer|taşımacılık",i]'],
-  "Araç kiralama": ['["amenity"="car_rental"]'],
-  "Gıda toptancısı": ['["shop"="wholesale"]', '["name"~"gıda.*toptan|toptan.*gıda|erzak",i]'],
-  "İçecek toptancısı": ['["shop"="beverages"]', '["name"~"içecek|meşrubat",i]'],
-  "Temizlik malzemeleri toptancısı": ['["name"~"temizlik.*(toptan|malzeme)|deterjan",i]'],
-  "Ambalaj malzemeleri toptancısı": ['["name"~"ambalaj|paketleme",i]'],
-  "Oto yedek parça toptancısı": ['["shop"="car_parts"]'],
-  "Hırdavat toptancısı": ['["shop"="hardware"]'],
-  "Yapı malzemeleri toptancısı": ['["shop"="trade"]', '["name"~"yapı malzeme|inşaat malzeme",i]'],
-  "Elektrik malzemeleri toptancısı": ['["shop"="electrical"]', '["name"~"elektrik malzeme",i]'],
-  "Tekstil toptancısı": ['["name"~"tekstil|kumaş",i]'],
-  "Kırtasiye toptancısı": ['["shop"="stationery"]'],
-  "Medikal malzeme tedarikçisi": ['["shop"="medical_supply"]', '["name"~"medikal|tıbbi malzeme",i]'],
-  "Endüstriyel malzeme tedarikçisi": ['["name"~"endüstriyel|sanayi malzeme",i]'],
-  "Mobilya üreticisi": ['["craft"="cabinet_maker"]', '["name"~"mobilya",i]'],
-  "Plastik ürün üreticisi": ['["name"~"plastik",i]'],
-  "Yem bayisi": ['["shop"="agrarian"]', '["name"~"yem",i]'],
-  "Tarım ürünleri toptancısı": ['["shop"="agrarian"]', '["name"~"tarım|ziraat",i]'],
-  Toptancı: ['["shop"="wholesale"]', '["name"~"toptan",i]'],
-  "Dağıtım firması": ['["office"="logistics"]', '["name"~"dağıtım|lojistik",i]'],
-};
 
 interface NominatimPlace {
   osm_type?: "node" | "way" | "relation";
@@ -126,10 +71,35 @@ export interface PlaceSearchOptions {
 export async function searchPlaces(query: string, sector: string, options: PlaceSearchOptions = {}) {
   const province = options.province || provinceFromQuery(query);
   if (!province) throw new OpenDataPlacesError(400, "OpenStreetMap araması için şehir seçilemedi.");
-  const places = await overpassSearch(sector, province);
-  return places
+  const plan = sectorQueryPlan(sector);
+  let overpassError: OpenDataPlacesError | null = null;
+  let overpassPlaces: OverpassElement[] = [];
+  if (plan.overpassSelectors.length) {
+    try {
+      overpassPlaces = await overpassSearch(sector, province, plan.overpassSelectors);
+    } catch (error) {
+      if (!(error instanceof OpenDataPlacesError)) throw error;
+      overpassError = error;
+    }
+  }
+
+  const mappedOverpass = overpassPlaces
     .map((place) => mapOverpassPlace(place, { sector, province }))
     .filter((place): place is PlaceDetails => Boolean(place));
+
+  let textPlaces: PlaceDetails[] = [];
+  if (plan.useTextSearch) {
+    try {
+      textPlaces = await nominatimSectorSearch(sector, province);
+    } catch (error) {
+      if (!mappedOverpass.length && error instanceof OpenDataPlacesError) throw error;
+      if (!(error instanceof OpenDataPlacesError)) throw error;
+    }
+  }
+
+  const combined = uniquePlaces([...mappedOverpass, ...textPlaces]);
+  if (!combined.length && overpassError && !plan.useTextSearch) throw overpassError;
+  return combined;
 }
 
 function mapOverpassPlace(
@@ -176,8 +146,11 @@ function mapOverpassPlace(
   };
 }
 
-async function overpassSearch(sector: string, province: string): Promise<OverpassElement[]> {
-  const selectors = SECTOR_SELECTORS[sector] ?? [`["name"~"${escapeOverpassRegex(sector)}",i]`];
+async function overpassSearch(
+  sector: string,
+  province: string,
+  selectors: readonly string[],
+): Promise<OverpassElement[]> {
   const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
   const provinceIsoCode = TURKIYE_IL_ISO_KODLARI[province as TurkiyeIli];
   const areaSelector = provinceIsoCode
@@ -192,7 +165,7 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
     `out center ${OVERPASS_RESULT_LIMIT};`,
   ].join("\n");
   const apiUrls = overpassApiUrls();
-  const cacheKey = `contactable-businesses-v6|${[...apiUrls].sort().join("|")}|${provinceIsoCode ?? province}|${sector}`;
+  const cacheKey = `contactable-businesses-v7|${[...apiUrls].sort().join("|")}|${provinceIsoCode ?? province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -237,6 +210,22 @@ async function overpassSearch(sector: string, province: string): Promise<Overpas
   throw new OpenDataPlacesError(lastStatus === 429 ? 429 : 503, timedOut
     ? "Ücretsiz OpenStreetMap sunucuları zaman aşımına uğradı. Kayıtlı ve mesaj gönderilmemiş adaylar gösterilecek."
     : `Ücretsiz OpenStreetMap sunucuları geçici hata verdi (${lastStatus}). Kayıtlı adaylar gösterilecek.`);
+}
+
+async function nominatimSectorSearch(sector: string, province: string) {
+  const params = new URLSearchParams({
+    q: `${sector} ${province}`,
+    format: "jsonv2",
+    addressdetails: "1",
+    extratags: "1",
+    namedetails: "1",
+    countrycodes: "tr",
+    limit: "40",
+  });
+  const rawPlaces = await nominatimRequest(`/search?${params}`, NOMINATIM_SEARCH_CACHE_MS);
+  return rawPlaces
+    .map((place) => mapNominatimPlace(place, { sector, province }))
+    .filter((place): place is PlaceDetails => Boolean(place));
 }
 
 function overpassApiUrls() {
@@ -437,12 +426,17 @@ function uniqueOverpassElements(elements: OverpassElement[]) {
   });
 }
 
-function escapeOverpassString(value: string) {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+function uniquePlaces(places: PlaceDetails[]) {
+  const seen = new Set<string>();
+  return places.filter((place) => {
+    if (seen.has(place.placeId)) return false;
+    seen.add(place.placeId);
+    return true;
+  });
 }
 
-function escapeOverpassRegex(value: string) {
-  return escapeOverpassString(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeOverpassString(value: string) {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 function activityFromTags(tags: Record<string, string>, elementTimestamp?: string) {

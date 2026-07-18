@@ -11,6 +11,11 @@ describe("başarılı şehir ve sektör önceliği", () => {
     expect(priorities.provinces).toEqual(provinces);
   });
 
+  it("şehir seçilmemiş sektör aramasında ticari yoğun ili önce dener", () => {
+    const priorities = buildSearchPriorities(["Adana", "Kırşehir", "İstanbul", "İzmir"], sectors, [], "website");
+    expect(priorities.provinces).toEqual(["İstanbul", "İzmir", "Adana", "Kırşehir"]);
+  });
+
   it("onay ve demo alınan şehir/sektör çiftini genel aramada öne taşır", () => {
     const priorities = buildSearchPriorities(provinces, sectors, [
       { lead_type: "website", status: "interested", source_province: "Kırşehir", source_sector: "Tente" },
