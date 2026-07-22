@@ -1,22 +1,25 @@
 import "server-only";
 import { TURKIYE_IL_ISO_KODLARI, type TurkiyeIli } from "@/data/turkiye-illeri";
 import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
-import { sectorQueryPlan } from "@/lib/openstreetmap/sector-selectors";
+import { selectorsForSector } from "@/lib/openstreetmap/sector-selectors";
+import { buildOverpassSearchQuery } from "@/lib/openstreetmap/query";
 import { openingRecencyStatus } from "@/lib/places/activity";
+import { OpenDataPlacesError } from "@/lib/places/error";
 import type { PlaceDetails } from "@/types";
 
 const DEFAULT_API_URL = "https://nominatim.openstreetmap.org";
 const DEFAULT_OVERPASS_FAST_URL = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
 const DEFAULT_OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
 const DEFAULT_OVERPASS_FALLBACK_URL = "https://overpass.private.coffee/api/interpreter";
-const SEARCH_CACHE_MS = 30 * 60 * 1000;
-const EMPTY_SEARCH_CACHE_MS = 5 * 60 * 1000;
-const NOMINATIM_SEARCH_CACHE_MS = 6 * 60 * 60 * 1000;
+const SEARCH_CACHE_MS = 6 * 60 * 60 * 1000;
+const EMPTY_SEARCH_CACHE_MS = 30 * 60 * 1000;
 const LOOKUP_CACHE_MS = 24 * 60 * 60 * 1000;
 const REQUEST_GAP_MS = 1_100;
 const REQUEST_TIMEOUT_MS = 15_000;
-const OVERPASS_RESULT_LIMIT = 500;
-const OVERPASS_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;
+const OVERPASS_RESULT_LIMIT = 250;
+const OVERPASS_FAILURE_COOLDOWN_MS = 10 * 60 * 1000;
+const OVERPASS_REQUEST_TIMEOUT_MS = 6_000;
+const OVERPASS_TOTAL_TIMEOUT_MS = 12_000;
 const BUSINESS_CATEGORIES = new Set([
   "amenity", "shop", "office", "craft", "healthcare", "leisure",
   "tourism", "industrial", "man_made",
@@ -47,22 +50,19 @@ type GlobalNominatimState = typeof globalThis & {
   __nominatimQueue?: Promise<void>;
   __nominatimLastRequestAt?: number;
   __overpassCache?: Map<string, CacheItem<OverpassElement[]>>;
+  __overpassInFlight?: Map<string, Promise<OverpassElement[]>>;
+  __overpassQueue?: Promise<void>;
   __overpassEndpointBackoff?: Map<string, number>;
 };
 
 const globalState = globalThis as GlobalNominatimState;
 const responseCache = globalState.__nominatimCache ??= new Map();
 const overpassCache = globalState.__overpassCache ??= new Map();
+const overpassInFlight = globalState.__overpassInFlight ??= new Map();
 const overpassEndpointBackoff = globalState.__overpassEndpointBackoff ??= new Map();
+globalState.__overpassQueue ??= Promise.resolve();
 globalState.__nominatimQueue ??= Promise.resolve();
 globalState.__nominatimLastRequestAt ??= 0;
-
-export class OpenDataPlacesError extends Error {
-  constructor(public readonly status: number, message: string) {
-    super(message);
-    this.name = "OpenDataPlacesError";
-  }
-}
 
 export interface PlaceSearchOptions {
   province?: string;
@@ -71,35 +71,10 @@ export interface PlaceSearchOptions {
 export async function searchPlaces(query: string, sector: string, options: PlaceSearchOptions = {}) {
   const province = options.province || provinceFromQuery(query);
   if (!province) throw new OpenDataPlacesError(400, "OpenStreetMap araması için şehir seçilemedi.");
-  const plan = sectorQueryPlan(sector);
-  let overpassError: OpenDataPlacesError | null = null;
-  let overpassPlaces: OverpassElement[] = [];
-  if (plan.overpassSelectors.length) {
-    try {
-      overpassPlaces = await overpassSearch(sector, province, plan.overpassSelectors);
-    } catch (error) {
-      if (!(error instanceof OpenDataPlacesError)) throw error;
-      overpassError = error;
-    }
-  }
-
-  const mappedOverpass = overpassPlaces
+  const overpassPlaces = await overpassSearch(sector, province, selectorsForSector(sector));
+  return overpassPlaces
     .map((place) => mapOverpassPlace(place, { sector, province }))
     .filter((place): place is PlaceDetails => Boolean(place));
-
-  let textPlaces: PlaceDetails[] = [];
-  if (plan.useTextSearch) {
-    try {
-      textPlaces = await nominatimSectorSearch(sector, province);
-    } catch (error) {
-      if (!mappedOverpass.length && error instanceof OpenDataPlacesError) throw error;
-      if (!(error instanceof OpenDataPlacesError)) throw error;
-    }
-  }
-
-  const combined = uniquePlaces([...mappedOverpass, ...textPlaces]);
-  if (!combined.length && overpassError && !plan.useTextSearch) throw overpassError;
-  return combined;
 }
 
 function mapOverpassPlace(
@@ -151,29 +126,38 @@ async function overpassSearch(
   province: string,
   selectors: readonly string[],
 ): Promise<OverpassElement[]> {
-  const phoneFilter = '[~"^(contact:)?(mobile|phone|telephone|whatsapp|cell|gsm)$"~"."]';
   const provinceIsoCode = TURKIYE_IL_ISO_KODLARI[province as TurkiyeIli];
   const areaSelector = provinceIsoCode
     ? `area["boundary"="administrative"]["ISO3166-2"="${provinceIsoCode}"]->.searchArea;`
     : `area["boundary"="administrative"]["admin_level"="4"]["name"="${escapeOverpassString(province)}"]->.searchArea;`;
-  const query = [
-    "[out:json][timeout:14];",
-    areaSelector,
-    "(",
-    ...selectors.map((selector) => `nwr${selector}${phoneFilter}(area.searchArea);`),
-    ");",
-    `out center ${OVERPASS_RESULT_LIMIT};`,
-  ].join("\n");
+  const query = buildOverpassSearchQuery(areaSelector, selectors, OVERPASS_RESULT_LIMIT);
   const apiUrls = overpassApiUrls();
-  const cacheKey = `contactable-businesses-v7|${[...apiUrls].sort().join("|")}|${provinceIsoCode ?? province}|${sector}`;
+  const cacheKey = `contactable-businesses-v8|${provinceIsoCode ?? province}|${sector}`;
   const cached = overpassCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
+  const activeRequest = overpassInFlight.get(cacheKey);
+  if (activeRequest) return activeRequest;
+
+  const request = queueOverpassRequest(() => requestOverpass(apiUrls, query))
+    .then((value) => {
+      overpassCache.set(cacheKey, { expiresAt: Date.now() + (value.length ? SEARCH_CACHE_MS : EMPTY_SEARCH_CACHE_MS), value });
+      return value;
+    })
+    .finally(() => overpassInFlight.delete(cacheKey));
+  overpassInFlight.set(cacheKey, request);
+  return request;
+}
+
+async function requestOverpass(apiUrls: readonly string[], query: string) {
   let lastStatus = 503;
   let timedOut = false;
+  const deadline = Date.now() + OVERPASS_TOTAL_TIMEOUT_MS;
   for (const apiUrl of apiUrls) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs < 500) break;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 18_000);
+    const timeout = setTimeout(() => controller.abort(), Math.min(OVERPASS_REQUEST_TIMEOUT_MS, remainingMs));
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -197,7 +181,6 @@ async function overpassSearch(
       const data = await response.json() as { elements?: OverpassElement[] };
       const value = uniqueOverpassElements(data.elements ?? []);
       overpassEndpointBackoff.delete(apiUrl);
-      overpassCache.set(cacheKey, { expiresAt: Date.now() + (value.length ? SEARCH_CACHE_MS : EMPTY_SEARCH_CACHE_MS), value });
       return value;
     } catch (error) {
       if (error instanceof OpenDataPlacesError) throw error;
@@ -212,20 +195,16 @@ async function overpassSearch(
     : `Ücretsiz OpenStreetMap sunucuları geçici hata verdi (${lastStatus}). Kayıtlı adaylar gösterilecek.`);
 }
 
-async function nominatimSectorSearch(sector: string, province: string) {
-  const params = new URLSearchParams({
-    q: `${sector} ${province}`,
-    format: "jsonv2",
-    addressdetails: "1",
-    extratags: "1",
-    namedetails: "1",
-    countrycodes: "tr",
-    limit: "40",
-  });
-  const rawPlaces = await nominatimRequest(`/search?${params}`, NOMINATIM_SEARCH_CACHE_MS);
-  return rawPlaces
-    .map((place) => mapNominatimPlace(place, { sector, province }))
-    .filter((place): place is PlaceDetails => Boolean(place));
+async function queueOverpassRequest<T>(operation: () => Promise<T>) {
+  const previous = globalState.__overpassQueue ?? Promise.resolve();
+  let release: () => void = () => undefined;
+  globalState.__overpassQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
 }
 
 function overpassApiUrls() {
@@ -235,10 +214,12 @@ function overpassApiUrls() {
     .filter(Boolean);
   const urls = [...new Set([...configured, DEFAULT_OVERPASS_FAST_URL, DEFAULT_OVERPASS_FALLBACK_URL, DEFAULT_OVERPASS_API_URL])];
   const now = Date.now();
-  return urls.sort((left, right) =>
+  const ordered = urls.sort((left, right) =>
     Number((overpassEndpointBackoff.get(left) ?? 0) > now) -
     Number((overpassEndpointBackoff.get(right) ?? 0) > now),
   );
+  const healthy = ordered.filter((url) => (overpassEndpointBackoff.get(url) ?? 0) <= now);
+  return healthy.length ? healthy : ordered;
 }
 
 function markOverpassEndpointFailed(apiUrl: string) {
@@ -422,15 +403,6 @@ function uniqueOverpassElements(elements: OverpassElement[]) {
     const key = `${element.type}:${element.id}`;
     if (seen.has(key)) return false;
     seen.add(key);
-    return true;
-  });
-}
-
-function uniquePlaces(places: PlaceDetails[]) {
-  const seen = new Set<string>();
-  return places.filter((place) => {
-    if (seen.has(place.placeId)) return false;
-    seen.add(place.placeId);
     return true;
   });
 }

@@ -31,23 +31,12 @@ const PROVINCE_BASE_PRIORITY = [
 // denenir. Listedeki diğer tüm aktif sektörler de sıralamanın devamında korunur.
 const WEBSITE_BASE_PRIORITY = [
   "Kuaför",
-  "Emlak danışmanı",
-  "Mobilyacı",
-  "Güzellik salonu",
-  "Diş kliniği",
-  "Veteriner kliniği",
-  "Pastane",
-  "Spor salonu",
-  "Çiçekçi",
-  "Araç kiralama",
-  "Oto yıkama",
+  "Güzellik merkezi",
   "Berber",
-  "Fotoğrafçı",
-  "Matbaa",
-  "Anaokulu",
-  "Mimarlık ofisi",
-  "Elektrikçi",
-  "Tesisatçı",
+  "Tırnak salonu",
+  "Oto yıkama",
+  "Halı yıkama",
+  "Nakliyat",
 ] as const;
 
 const ACCOUNTING_BASE_PRIORITY = [

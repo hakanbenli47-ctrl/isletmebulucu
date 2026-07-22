@@ -115,7 +115,7 @@ export function formatQualificationSummary(diagnostics: QualificationDiagnostics
   const acceptedNote = diagnostics.openingDateUnknown
     ? ` ${diagnostics.openingDateUnknown} kabul edilen adayın açılış tarihi kayıtlı değil; faal kayıt ve geçerli mobil sinyaliyle yedek havuza alındı.`
     : "";
-  return rejected ? `${diagnostics.total} açık veri sonucu denetlendi; ${rejected} olduğu için elendi.${acceptedNote}` : `${diagnostics.total} açık veri sonucu denetlendi.${acceptedNote}`;
+  return rejected ? `${diagnostics.total} işletme sonucu denetlendi; ${rejected} olduğu için elendi.${acceptedNote}` : `${diagnostics.total} işletme sonucu denetlendi.${acceptedNote}`;
 }
 
 function matchesLocation(place: PlaceDetails, province: string) {

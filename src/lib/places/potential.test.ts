@@ -32,7 +32,7 @@ describe("potansiyel aday kuralları", () => {
       activityConfidence: "strong",
     }), "website");
     expect(result.eligible).toBe(true);
-    expect(result.reason).toContain("açık veri");
+    expect(result.reason).toContain("işletme kaydı");
   });
 
   it("açılış tarihi eksik açık veri adayını dengeli modda kabul eder", () => {

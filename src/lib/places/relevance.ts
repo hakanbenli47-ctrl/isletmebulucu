@@ -7,7 +7,7 @@ const RULES: Rule[] = [
   { match: /oto yikama|oto detay|arac kaplama/, types: ["car_wash", "car_repair"], keywords: ["oto", "detay", "kaplama", "wash"] },
   { match: /cam balkon|tente|tadilat|dekorasyon/, types: ["general_contractor", "home_improvement_store", "interior_designer"], keywords: ["cam", "balkon", "tente", "tadilat", "dekorasyon"] },
   { match: /temizlik sirketi|koltuk yikama|hali yikama|ilaclama/, types: ["service", "cleaning_service", "laundry", "pest_control_service"], keywords: ["temizlik", "koltuk", "hali", "ilaclama"] },
-  { match: /guzellik|kuafor|berber/, types: ["beautician", "beauty_salon", "hair_care", "hair_salon", "barber_shop"], keywords: ["guzellik", "kuafor", "berber", "hair"] },
+  { match: /guzellik|kuafor|berber|tirnak|nail/, types: ["beautician", "beauty_salon", "hair_care", "hair_salon", "barber_shop", "nail_salon"], keywords: ["guzellik", "kuafor", "berber", "tirnak", "nail", "hair", "beauty"] },
   { match: /diyetisyen|psikolog|fizyoterapist|dis klinigi/, types: ["nutritionist", "psychologist", "physiotherapist", "dental_clinic", "dentist"], keywords: ["diyet", "psikolog", "fizyo", "dis", "dental"] },
   { match: /veteriner/, types: ["veterinary_care"], keywords: ["veteriner", "pet"] },
   { match: /emlak/, types: ["real_estate_agency"], keywords: ["emlak", "gayrimenkul"] },
@@ -21,7 +21,7 @@ const RULES: Rule[] = [
   { match: /mobilyaci/, types: ["furniture_store", "manufacturer"], keywords: ["mobilya"] },
   { match: /elektrikci/, types: ["electrician"], keywords: ["elektrik"] },
   { match: /tesisatci|kombi servisi/, types: ["plumber", "service", "heating_contractor", "air_conditioning_repair_service"], keywords: ["tesisat", "kombi", "isitma"] },
-  { match: /nakliyat|transfer/, types: ["moving_company", "transportation_service", "shipping_service"], keywords: ["nakliyat", "transfer", "tasima"] },
+  { match: /nakliyat|nakliye|transfer/, types: ["moving_company", "moving_service", "transportation_service", "shipping_service"], keywords: ["nakliyat", "nakliye", "moving", "transfer", "tasima"] },
   { match: /arac kiralama/, types: ["car_rental"], keywords: ["kiralama", "rent"] },
   { match: /gida toptancisi/, types: ["wholesaler", "supplier", "food_store", "grocery_store", "warehouse_store"], keywords: ["gida", "erzak"] },
   { match: /icecek toptancisi/, types: ["wholesaler", "supplier", "liquor_store"], keywords: ["icecek", "mesrubat"] },
@@ -49,7 +49,7 @@ export function assessSectorRelevance(place: PlaceDetails, sector: string, leadT
     normalize(place.sector) === normalizedSector &&
     place.businessStatus === "OPERATIONAL"
   ) {
-    return { eligible: true, score: 10, reason: "OpenStreetMap arama kategorisi eşleşti" };
+    return { eligible: true, score: 10, reason: "Harita sağlayıcısının arama kategorisi eşleşti" };
   }
 
   const normalizedName = normalize(place.name);
@@ -84,6 +84,7 @@ export function includedTypeForSector(sector: string): string | undefined {
   if (/guzellik/.test(value)) return "beauty_salon";
   if (/kuafor/.test(value)) return "hair_salon";
   if (/berber/.test(value)) return "barber_shop";
+  if (/tirnak|nail/.test(value)) return "nail_salon";
   if (/fizyoterapist/.test(value)) return "physiotherapist";
   if (/dis klinigi/.test(value)) return "dental_clinic";
   if (/veteriner/.test(value)) return "veterinary_care";
@@ -116,4 +117,3 @@ function normalize(value: unknown) {
   if (typeof value !== "string") return "";
   return value.toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("ı", "i").replaceAll("ş", "s").replaceAll("ğ", "g").replaceAll("ç", "c").replaceAll("ö", "o").replaceAll("ü", "u").replace(/[^a-z0-9]+/g, " ").trim();
 }
-

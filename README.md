@@ -4,8 +4,8 @@
 üzerinden bulan, uygun adayları Supabase'e kaydeden ve görüşme/takip aşamalarını
 yöneten özel kullanımlı bir Next.js uygulamasıdır.
 
-Ücretli harita sağlayıcı entegrasyonu yoktur. Uygulama ücretli bir harita API
-anahtarı okumaz; yalnızca OpenStreetMap tabanlı açık veri servislerini kullanır.
+Harita sağlayıcısı için ücretli API veya kredi kartı gerekmez. İşletme araması
+Overpass API, eski kayıt ayrıntısı gerektiğinde Nominatim üzerinden yapılır.
 
 ## Yerelde çalıştırma
 
@@ -30,7 +30,7 @@ NOMINATIM_API_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=IsletmeBulucu/1.0
 OVERPASS_API_URL=https://overpass-api.de/api/interpreter
 OVERPASS_API_URLS=https://maps.mail.ru/osm/tools/overpass/api/interpreter,https://overpass.private.coffee/api/interpreter,https://overpass-api.de/api/interpreter
-PLACES_MAX_CALLS_PER_SEARCH=8
+PLACES_MAX_CALLS_PER_SEARCH=4
 NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
 
@@ -63,23 +63,22 @@ Son yükseltme mevcut adayları silmez. `lead_records` tablosuna `data_source`,
 
 Uygulamada herkese açık kayıt ekranı yoktur.
 
-## Açık veri araması ve kayıt davranışı
+## Ücretsiz OpenStreetMap araması ve kayıt davranışı
 
-- Yapısal etiketi bulunan sektörler OpenStreetMap Overpass ile aranır. Tente, cam
-  balkon ve nakliyat gibi işletme adına bağımlı sektörlerde zaman aşımına giren geniş
-  regex yerine Nominatim metin araması kullanılır. İki kaynağın sonuçları aynı OSM
-  kimliğiyle tekilleştirilip aynı telefon, konum, sektör ve site kontrolünden geçer.
-- Kamu Nominatim servisine saygı için Nominatim istekleri en az 1,1 saniye aralıkla
-  sıraya alınır. Tüm açık veri cevapları sunucu tarafında önbelleğe alınır ve bir
-  kullanıcı aramasında en fazla 8 şehir/sektör birleşimi denenir. Filtre yoksa
+- İşletme listeleri bu iş için tasarlanmış ücretsiz Overpass API üzerinden alınır.
+  Kamu Nominatim servisi sistematik işletme taramasında kullanılmaz.
+- Aynı şehir/sektör aramaları 6 saat önbelleğe alınır; eşzamanlı aynı istekler tek
+  HTTP çağrısında birleştirilir. Overpass kullanım politikasına uygun olarak sorgular
+  sırayla çalışır. Bir kullanıcı aramasında en fazla 4 birleşim denenir. Filtre yoksa
   sonuçların yaklaşık `%40`ı demo/ilgi/müşteri alınan birleşimlerden gelir. Kalan
-  bölümde her aktif sektör kendi OSM etiketiyle ayrı sorgulanır; 81 il × aktif sektör
+  bölümde her aktif sektör ayrı sorgulanır; 81 il × aktif sektör
   birleşimleri tekrar etmeden dolaşılır ve tarama sonraki çağrıda kaldığı yerden devam
   eder. Sektör başına dengeli sonuç payı, kuaför gibi yoğun bir kategorinin tabloyu
   tek başına doldurmasını önler. Tüm uygun adaylar mevcut `lead_records` tablosunda
   birleştirilir; yeni tablo veya veritabanı şema değişikliği gerekmez.
-- Bir Overpass sunucusu geçici hata verirse `OVERPASS_API_URLS` listesindeki sıradaki
-  açık sunucu denenir; başarılı cevap önbelleğe alınarak gereksiz tekrar önlenir.
+- Bir Overpass sunucusu yanıt vermezse sıradaki ücretsiz sunucu denenir. Tüm ücretsiz
+  uç noktalar yanıt vermezse sonraki şehirleri bekletmek yerine
+  daha önce kaydedilmiş ve henüz mesaj gönderilmemiş adaylar hemen gösterilir.
 - Son iki takvim yılı içinde açıldığı doğrulanan işletmeler önce gösterilir. Açılış
   tarihi açık veride bulunmayan ancak kapanış/terk edilme işareti taşımayan ve BTK
   planına uygun Türkiye cep telefonu olan işletmeler yedek aday olarak kabul edilir.
@@ -88,7 +87,7 @@ Uygulamada herkese açık kayıt ekranı yoktur.
   olarak Supabase'e kaydedilir.
 - WhatsApp sohbet ekranının açıldığı kullanıcı tarafından onaylanınca kayıt
   `contacted` durumuna geçer ve bir daha yeni aday/yedek aday olarak gösterilmez.
-- Nominatim geçici hata verirse yalnızca daha önce kaydedilmiş, `status = 'new'`
+- Açık veri servisleri geçici hata verirse yalnızca daha önce kaydedilmiş, `status = 'new'`
   olan ve mesaj gönderilmemiş adaylar gösterilir.
 - Aynı OpenStreetMap kimliği her kullanıcı için yalnızca bir kez saklanır.
 - `İlgileniyor`, `Detay / demo` veya `Müşteri` sonucu alınan şehir/sektör çiftleri

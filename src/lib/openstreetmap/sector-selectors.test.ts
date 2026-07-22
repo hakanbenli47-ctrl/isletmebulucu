@@ -16,8 +16,8 @@ describe("OpenStreetMap sektör kataloğu", () => {
   });
 
   it("yapısal etiketi hızlı Overpass, ad yedeğini metin araması olarak ayırır", () => {
-    expect(sectorQueryPlan("Cam balkon")).toEqual({
-      overpassSelectors: ['["craft"="glaziery"]', '["craft"="window_construction"]'],
+    expect(sectorQueryPlan("Halı yıkama")).toEqual({
+      overpassSelectors: ['["shop"="laundry"]'],
       useTextSearch: true,
     });
     expect(sectorQueryPlan("Kuaför")).toEqual({

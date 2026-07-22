@@ -5,7 +5,8 @@ import { isMockMode } from "@/lib/config";
 import { DEFAULT_SETTINGS } from "@/data/defaults";
 import { ACCOUNTING_SECTORS, WEBSITE_SECTORS } from "@/data/sectors";
 import { TURKIYE_ILLERI } from "@/data/turkiye-illeri";
-import { OpenDataPlacesError, searchPlaces } from "@/lib/openstreetmap/client";
+import { OpenDataPlacesError } from "@/lib/places/error";
+import { searchPlaces } from "@/lib/openstreetmap/client";
 import { buildSearchPriorities, type SearchHistorySignal } from "@/lib/places/search-priority";
 import { balancedResultLimit, buildSearchQueue, successfulResultLimit } from "@/lib/places/search-queue";
 import { orderPotentialPlaces, withPotential } from "@/lib/places/potential";
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
       provinceIndex: modulo(stateRow?.province_index ?? 0, priorities.provinces.length),
       sectorIndex: modulo(stateRow?.sector_index ?? 0, priorities.sectors.length),
     };
-    const maxCalls = Math.min(12, Math.max(1, Number(process.env.PLACES_MAX_CALLS_PER_SEARCH) || 8));
+    const maxCalls = Math.min(8, Math.max(1, Number(process.env.PLACES_MAX_CALLS_PER_SEARCH) || 4));
     const searchQueue = buildSearchQueue({
       requestedProvince,
       requestedSector,
@@ -112,6 +113,9 @@ export async function POST(request: Request) {
       position,
       maxCalls,
     });
+    // Kamu Overpass sunucuları aynı istemciden paralel sorgu yerine sıralı kullanım
+    // istiyor. Her sorgu kendi içinde hızlı uç nokta geçişi ve önbellek kullanır.
+    const searchConcurrency = 1;
     const seen = new Set(existing.placeIds);
     const seenMobiles = new Set(existing.mobiles);
     const diagnostics = createQualificationDiagnostics();
@@ -128,23 +132,48 @@ export async function POST(request: Request) {
     const isSectorSweep = !requestedSector && searchQueue.length > 1;
     let sweepCallsRemaining = searchQueue.filter((pair) => pair.mixGroup !== "priority").length;
 
-    for (const { province, sector, cursorAfter, mixGroup } of searchQueue) {
-      if (found.length >= target) break;
-      const remaining = target - found.length;
-      const isSweepPair = isSectorSweep && mixGroup !== "priority";
-      const selectionLimit = mixGroup === "priority"
-        ? Math.min(remaining, Math.max(0, priorityResultLimit - priorityFound))
-        : isSweepPair
-          ? balancedResultLimit(remaining, sweepCallsRemaining)
-          : remaining;
-      if (isSweepPair) sweepCallsRemaining = Math.max(0, sweepCallsRemaining - 1);
-      if (selectionLimit <= 0) continue;
+    searchBatches:
+    for (let batchStart = 0; batchStart < searchQueue.length && found.length < target; batchStart += searchConcurrency) {
+      const batch = searchQueue.slice(batchStart, batchStart + searchConcurrency);
+      apiCalls += batch.length;
+      for (const pair of batch) {
+        searchedProvinces.add(pair.province);
+        searchedSectors.add(pair.sector);
+      }
+      const outcomes = await Promise.all(batch.map(async (pair) => {
+        try {
+          const places = await searchPlaces(`${pair.sector}, ${pair.province}, Türkiye`, pair.sector, { province: pair.province });
+          return { pair, places, error: null };
+        } catch (error) {
+          if (!(error instanceof OpenDataPlacesError)) throw error;
+          return { pair, places: [] as PlaceDetails[], error };
+        }
+      }));
 
-      apiCalls += 1;
-      searchedProvinces.add(province);
-      searchedSectors.add(sector);
-      try {
-        const searchResults = await searchPlaces(`${sector}, ${province}, Türkiye`, sector, { province });
+      for (const { pair: { province, sector, cursorAfter, mixGroup }, places: searchResults, error } of outcomes) {
+        if (found.length >= target) break;
+        if (error) {
+          failedCalls += 1;
+          lastOpenDataError = error;
+          if (isSectorSweep && mixGroup !== "priority") {
+            sweepCallsRemaining = Math.max(0, sweepCallsRemaining - 1);
+          }
+          if (cursorAfter) position = cursorAfter;
+          // Bütün ücretsiz uç noktalar aynı sorguda başarısız olduysa sonraki
+          // şehirleri de bekletmeyiz; kayıtlı aday havuzuna hemen geçeriz.
+          if (error.status === 429 || error.status >= 500) break searchBatches;
+          continue;
+        }
+
+        const remaining = target - found.length;
+        const isSweepPair = isSectorSweep && mixGroup !== "priority";
+        const selectionLimit = mixGroup === "priority"
+          ? Math.min(remaining, Math.max(0, priorityResultLimit - priorityFound))
+          : isSweepPair
+            ? balancedResultLimit(remaining, sweepCallsRemaining)
+            : remaining;
+        if (isSweepPair) sweepCallsRemaining = Math.max(0, sweepCallsRemaining - 1);
+        if (selectionLimit <= 0) continue;
 
         const eligible = qualifySearchResults(orderPotentialPlaces(searchResults, leadType, quality), {
           leadType,
@@ -154,10 +183,8 @@ export async function POST(request: Request) {
           presence,
           seenPlaceIds: seen,
           seenMobiles,
-          // Bir fazla aday isteyerek aynı ücretsiz sonuç havuzunda devam edecek
-          // yeni işletme kalıp kalmadığını veritabanına ek yazı atmadan anlarız.
-          // Çok sektörlü taramada tek bir yoğun sektör bütün tabloyu doldurmasın diye
-          // sektör başına pay uygular, fazladan adayları son tamamlama için bellekte tutarız.
+          // Bir fazla aday isteyerek aynı sonuç havuzunda devam edecek yeni işletme
+          // kalıp kalmadığını veritabanına ek yazı atmadan anlarız.
           limit: mixGroup === "priority" || isSweepPair ? remaining + 1 : selectionLimit + 1,
           diagnostics,
         });
@@ -169,8 +196,6 @@ export async function POST(request: Request) {
           deferredCoverage.push({ province, sector, candidates: eligible.slice(selectionLimit) });
         }
         if (!isSectorSweep) currentPoolHasMore = poolHasMore;
-        // Instagram canlı kontrolü pahalı olabilir; yüzlerce ham sonuç yerine yalnızca
-        // gerçekten gösterilecek küçük aday grubunda çalıştırılır.
         const selected = leadType === "website"
           ? await enrichInstagramActivity(selectedCandidates)
           : selectedCandidates;
@@ -184,15 +209,11 @@ export async function POST(request: Request) {
           }
           if (mixGroup === "priority") priorityFound += inserted.length;
         }
-      } catch (error) {
-        if (!(error instanceof OpenDataPlacesError)) throw error;
-        failedCalls += 1;
-        lastOpenDataError = error;
+        // Havuzda hedefin dışında yeni aday kaldıysa imleci ilerletmeyiz. Sonraki
+        // tıklama aynı önbellekten, daha önce kaydedilenleri atlayarak devam eder.
+        if (cursorAfter && (isSectorSweep || !currentPoolHasMore)) position = cursorAfter;
+        if (!isSectorSweep && currentPoolHasMore) break searchBatches;
       }
-      // Havuzda hedefin dışında yeni aday kaldıysa imleci ilerletmeyiz. Sonraki
-      // tıklama aynı önbellekten, daha önce kaydedilenleri atlayarak anında devam eder.
-      if (cursorAfter && (isSectorSweep || !currentPoolHasMore)) position = cursorAfter;
-      if (!isSectorSweep && currentPoolHasMore) break;
     }
 
     // Önce farklı sektörlerde bulunan yedeklerle hedef sayıyı tamamlarız; böylece
@@ -268,7 +289,7 @@ export async function POST(request: Request) {
     const limited = found.length < target;
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
     const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
-    const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} açık veri sorgusu denendi.`;
+    const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} OpenStreetMap sorgusu denendi.`;
     const continuationLabel = currentPoolHasMore ? " Aynı filtrede sıradaki yeni işletmeler hazır." : "";
     const mixLabel = isMixedSearch
       ? ` Karışım: ${priorityFound} öncelikli, ${Math.max(0, found.length - priorityFound)} genel sektör taraması işletmesi.`

@@ -55,7 +55,7 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
       level: eligible && score >= 75 ? "high" : "standard",
       score,
       reason: recency === "recent"
-        ? `${score}/100 potansiyel · ${place.openedAt} açılış · faal açık veri kaydı`
+        ? `${score}/100 potansiyel · ${place.openedAt} açılış · faal işletme kaydı`
         : `${score}/100 potansiyel · açılış tarihi kayıtlı değil · kapanış işareti yok`,
     };
   }

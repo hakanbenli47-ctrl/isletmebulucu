@@ -1,5 +1,5 @@
 import { AuthError } from "@/lib/auth";
-import { OpenDataPlacesError } from "@/lib/openstreetmap/client";
+import { OpenDataPlacesError } from "@/lib/places/error";
 import { kullaniciyaUygunSupabaseHatasi } from "@/lib/supabase/errors";
 import { ZodError } from "zod";
 
