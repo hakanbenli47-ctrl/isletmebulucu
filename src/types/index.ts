@@ -40,7 +40,7 @@ export interface PlaceDetails {
   potentialReason?: string;
   sector?: string;
   isDemo?: boolean;
-  dataSource?: "openstreetmap" | "mock" | "legacy";
+  dataSource?: "openstreetmap" | "overture" | "mock" | "legacy";
   activityConfidence?: "strong" | "likely" | "unknown";
   activityReason?: string;
   openingHours?: string;
@@ -62,7 +62,7 @@ export interface LeadRecord {
   source_province: string | null;
   source_sector: string | null;
   created_at: string;
-  data_source?: "openstreetmap" | "mock" | "legacy";
+  data_source?: "openstreetmap" | "overture" | "mock" | "legacy";
   details_cache?: PlaceDetails | null;
   details_cached_at?: string | null;
   details: PlaceDetails;

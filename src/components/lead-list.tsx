@@ -19,9 +19,11 @@ export default function LeadList({ leads, leadType, loading, onContact, onStatus
         <div className="lead-head" role="row"><span>İşletme</span><span>Konum ve sektör</span><span>Telefon / web</span>{contacted && <span>İletişim</span>}<span className="right">İşlemler</span></div>
         {leads.map((lead) => {
           const place = lead.details;
-          const sourceLabel = place.dataSource === "openstreetmap" || lead.data_source === "openstreetmap" || lead.place_id.startsWith("osm:")
-            ? "OpenStreetMap"
-            : "Harita";
+          const sourceLabel = place.dataSource === "overture" || lead.place_id.startsWith("overture:")
+            ? "Overture Maps"
+            : place.dataSource === "openstreetmap" || lead.data_source === "openstreetmap" || lead.place_id.startsWith("osm:")
+              ? "OpenStreetMap"
+              : "Harita";
           const hasInstagram = isInstagramProfile(place.websiteUri);
           const phone = place.internationalPhone ?? place.phone ?? "";
           const displayPhone = formatPhoneSearch(phone);
@@ -52,7 +54,7 @@ export default function LeadList({ leads, leadType, loading, onContact, onStatus
           </article>;
         })}
       </div>
-      <p className="data-attribution">İşletme verisi © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap katkıda bulunanları</a>.</p>
+      <p className="data-attribution">İşletme verisi © <a href="https://overturemaps.org/" target="_blank" rel="noreferrer">Overture Maps Foundation</a> ve <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap katkıda bulunanları</a>.</p>
     </div>
   );
 }

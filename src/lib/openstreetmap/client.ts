@@ -3,8 +3,10 @@ import { TURKIYE_IL_ISO_KODLARI, type TurkiyeIli } from "@/data/turkiye-illeri";
 import { contactFromOsmTags, isWhatsAppLink } from "@/lib/openstreetmap/contact";
 import { selectorsForSector } from "@/lib/openstreetmap/sector-selectors";
 import { buildOverpassSearchQuery } from "@/lib/openstreetmap/query";
+import { searchOverturePlaces } from "@/lib/overture/client";
 import { openingRecencyStatus } from "@/lib/places/activity";
 import { OpenDataPlacesError } from "@/lib/places/error";
+import { isIndependentWebsite, isInstagramProfile, socialProfileType } from "@/lib/places/website";
 import type { PlaceDetails } from "@/types";
 
 const DEFAULT_API_URL = "https://nominatim.openstreetmap.org";
@@ -66,15 +68,28 @@ globalState.__nominatimLastRequestAt ??= 0;
 
 export interface PlaceSearchOptions {
   province?: string;
+  presence?: "all" | "instagram" | "no_social";
 }
 
 export async function searchPlaces(query: string, sector: string, options: PlaceSearchOptions = {}) {
   const province = options.province || provinceFromQuery(query);
   if (!province) throw new OpenDataPlacesError(400, "OpenStreetMap araması için şehir seçilemedi.");
+  const indexedPlaces = searchOverturePlaces(sector, province)
+    .filter((place) => matchesIndexedPresence(place.websiteUri, options.presence ?? "all"));
+  if (indexedPlaces.length) return indexedPlaces;
   const overpassPlaces = await overpassSearch(sector, province, selectorsForSector(sector));
   return overpassPlaces
     .map((place) => mapOverpassPlace(place, { sector, province }))
     .filter((place): place is PlaceDetails => Boolean(place));
+}
+
+function matchesIndexedPresence(
+  websiteUri: string | null | undefined,
+  presence: NonNullable<PlaceSearchOptions["presence"]>,
+) {
+  if (presence === "instagram") return isInstagramProfile(websiteUri);
+  if (presence === "no_social") return socialProfileType(websiteUri) === null && !isIndependentWebsite(websiteUri);
+  return true;
 }
 
 function mapOverpassPlace(

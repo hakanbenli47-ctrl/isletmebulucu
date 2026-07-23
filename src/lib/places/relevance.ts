@@ -45,7 +45,7 @@ export function assessSectorRelevance(place: PlaceDetails, sector: string, leadT
   const normalizedSector = normalize(sector);
 
   if (
-    place.dataSource === "openstreetmap" &&
+    (place.dataSource === "openstreetmap" || place.dataSource === "overture") &&
     normalize(place.sector) === normalizedSector &&
     place.businessStatus === "OPERATIONAL"
   ) {

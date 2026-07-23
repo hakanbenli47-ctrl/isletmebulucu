@@ -29,7 +29,7 @@ export default function DashboardShell({ children, email, isDemo }: { children: 
         <div className="account-area"><span className="account-email">{isDemo ? "Demo modu" : email}</span><button onClick={signOut} className="icon-button" aria-label="Çıkış yap" title="Çıkış yap"><LogOut size={18} /></button></div>
       </header>
       <main className="content">{children}</main>
-      <footer className="open-data-footer">Veri © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap katkıda bulunanları</a></footer>
+      <footer className="open-data-footer">Veri © <a href="https://overturemaps.org/" target="_blank" rel="noreferrer">Overture Maps Foundation</a> ve <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap katkıda bulunanları</a></footer>
       <nav className="mobile-nav" aria-label="Mobil menü">
         {nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={pathname === href ? "active" : ""}><Icon size={20} /><span>{label.replace(" Adayları", "")}</span></Link>)}
       </nav>

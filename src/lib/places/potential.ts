@@ -41,7 +41,7 @@ export function assessPotential(place: PlaceDetails, leadType: LeadType, quality
   const reviews = place.userRatingCount;
   const contactable = place.businessStatus === "OPERATIONAL" && Boolean(normalizeTurkishPhone(place.internationalPhone ?? place.phone));
 
-  if (place.dataSource === "openstreetmap") {
+  if (place.dataSource === "openstreetmap" || place.dataSource === "overture") {
     const websiteNeed = isInstagramProfile(place.websiteUri) ? 20 : place.websiteUri ? 5 : 18;
     const profilePoints = place.name && place.address ? 10 : 5;
     const recency = openingRecencyStatus(place.openedAt);

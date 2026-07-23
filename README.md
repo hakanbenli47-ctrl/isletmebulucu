@@ -1,11 +1,13 @@
 # İşletme Bulucu
 
-İşletme Bulucu; Türkiye genelindeki satış adaylarını ücretsiz OpenStreetMap verisi
-üzerinden bulan, uygun adayları Supabase'e kaydeden ve görüşme/takip aşamalarını
-yöneten özel kullanımlı bir Next.js uygulamasıdır.
+İşletme Bulucu; Türkiye genelindeki satış adaylarını ücretsiz Overture Maps ve
+OpenStreetMap verileri üzerinden bulan, uygun adayları Supabase'e kaydeden ve
+görüşme/takip aşamalarını yöneten özel kullanımlı bir Next.js uygulamasıdır.
 
 Harita sağlayıcısı için ücretli API veya kredi kartı gerekmez. İşletme araması
-Overpass API, eski kayıt ayrıntısı gerektiğinde Nominatim üzerinden yapılır.
+önce projeyle birlikte dağıtılan hızlı Overture işletme dizininden yapılır. Dizinde
+sonuç olmayan şehir/sektör çiftlerinde Overpass API, eski OpenStreetMap kayıt
+ayrıntısı gerektiğinde Nominatim kullanılır.
 
 ## Yerelde çalıştırma
 
@@ -63,10 +65,18 @@ Son yükseltme mevcut adayları silmez. `lead_records` tablosuna `data_source`,
 
 Uygulamada herkese açık kayıt ekranı yoktur.
 
-## Ücretsiz OpenStreetMap araması ve kayıt davranışı
+## Ücretsiz açık veri araması ve kayıt davranışı
 
-- İşletme listeleri bu iş için tasarlanmış ücretsiz Overpass API üzerinden alınır.
-  Kamu Nominatim servisi sistematik işletme taramasında kullanılmaz.
+- Kuaför, güzellik merkezi, berber, nakliyat, oto yıkama, halı yıkama ve tırnak
+  salonu aramaları Overture Maps'in `2026-06-17.0` açık veri sürümünden hazırlanmış
+  yerel dizinden gelir. Telefonu BTK mobil planına uymayan, kapalı görünen ve
+  Foursquare kaynaklı kayıtlar dizine alınmaz.
+- Yerel dizin uzak API çağrısı yapmadan bellekte şehir/sektör bazında aranır. Böylece
+  ücretsiz kamu servisleri yavaş veya erişilemez olsa bile uygun havuz bulunan
+  aramalar anında sonuç verir. Supabase'de yeni tablo ya da şema değişikliği gerekmez.
+- Yerel dizinde sonuç bulunmayan şehir/sektör çiftleri bu iş için tasarlanmış ücretsiz
+  Overpass API üzerinden aranır. Kamu Nominatim servisi sistematik işletme taramasında
+  kullanılmaz.
 - Aynı şehir/sektör aramaları 6 saat önbelleğe alınır; eşzamanlı aynı istekler tek
   HTTP çağrısında birleştirilir. Overpass kullanım politikasına uygun olarak sorgular
   sırayla çalışır. Bir kullanıcı aramasında en fazla 4 birleşim denenir. Filtre yoksa
@@ -103,10 +113,21 @@ Uygulamada herkese açık kayıt ekranı yoktur.
 - OpenStreetMap puan/yorum sağlamadığı için aday kalitesi konum, sektör, telefon,
   web sitesi ihtiyacı ve profil doluluğu üzerinden hesaplanır.
 
+Overture dizinini yeni bir resmi sürümle yenilemek için Python 3 üzerinde:
+
+```bash
+py -m pip install duckdb
+py scripts/update_overture_places.py --release YIL-AY-GUN.0
+```
+
+Komut yalnızca Türkiye'deki aktif sektörleri ve mobil telefonlu kayıtları indirerek
+`src/data/overture-places.json` dosyasını yeniden üretir. Çalışan uygulamada Python
+veya DuckDB bağımlılığı yoktur.
+
 Kamu Nominatim servisi ücretsizdir fakat yüksek hacimli toplu veri çıkarma hizmeti
 değildir. Daha yoğun kullanımda kendi Nominatim sunucunuzu kurun veya kullanım
 politikasına uygun başka bir OpenStreetMap sağlayıcısına `NOMINATIM_API_URL` ile
-geçin. OpenStreetMap atfı arayüzde görünür tutulmalıdır.
+geçin. Overture Maps ve OpenStreetMap atıfları arayüzde görünür tutulmalıdır.
 
 ## Demo modu
 

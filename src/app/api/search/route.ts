@@ -142,7 +142,7 @@ export async function POST(request: Request) {
       }
       const outcomes = await Promise.all(batch.map(async (pair) => {
         try {
-          const places = await searchPlaces(`${pair.sector}, ${pair.province}, Türkiye`, pair.sector, { province: pair.province });
+          const places = await searchPlaces(`${pair.sector}, ${pair.province}, Türkiye`, pair.sector, { province: pair.province, presence });
           return { pair, places, error: null };
         } catch (error) {
           if (!(error instanceof OpenDataPlacesError)) throw error;
@@ -289,7 +289,7 @@ export async function POST(request: Request) {
     const limited = found.length < target;
     const channel = leadType === "website" && presence === "instagram" ? " Instagram bağlantılı" : "";
     const resultLabel = `${found.length}${channel} uygun, mesaj gönderilmemiş işletme adayı bulundu ve kaydedildi.`;
-    const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} OpenStreetMap sorgusu denendi.`;
+    const coverageLabel = `${searchedProvinces.size} şehir ve ${searchedSectors.size} sektör için ${apiCalls} ücretsiz açık veri havuzu tarandı.`;
     const continuationLabel = currentPoolHasMore ? " Aynı filtrede sıradaki yeni işletmeler hazır." : "";
     const mixLabel = isMixedSearch
       ? ` Karışım: ${priorityFound} öncelikli, ${Math.max(0, found.length - priorityFound)} genel sektör taraması işletmesi.`
@@ -321,7 +321,7 @@ async function saveNewLeads(userId: string, leadType: LeadType, province: string
     status: "new",
     source_province: province,
     source_sector: sector,
-    data_source: "openstreetmap",
+    data_source: place.dataSource === "overture" ? "legacy" : "openstreetmap",
     details_cache: place,
     details_cached_at: now,
   }));
@@ -370,7 +370,7 @@ async function cachedUncontactedLeads(
       ...row.details_cache,
       province: row.details_cache.province || row.source_province || "",
       sector: row.details_cache.sector || row.source_sector || undefined,
-      dataSource: "openstreetmap",
+      dataSource: row.details_cache.dataSource ?? (row.data_source === "openstreetmap" ? "openstreetmap" : "legacy"),
     }, row.lead_type as LeadType);
     return [{ ...row, details } as LeadRecord];
   });

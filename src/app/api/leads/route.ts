@@ -234,7 +234,7 @@ async function detailsForRecords(records: DbLeadRow[]) {
         ...record.details_cache,
         province: record.details_cache.province || record.source_province || "",
         sector: record.details_cache.sector || record.source_sector || undefined,
-        dataSource: "openstreetmap",
+        dataSource: record.details_cache.dataSource ?? (record.data_source === "openstreetmap" ? "openstreetmap" : "legacy"),
       });
     } else {
       missing.push(record);
